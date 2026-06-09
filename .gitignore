@@ -1,0 +1,65 @@
+# Out-of-source build (CMake preset uses build/)
+/build/
+/out/
+/bin/
+/obj/
+
+# Accidental in-source CMake configure at repo root
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/Makefile
+/_deps/
+/compile_commands.json
+/CTestTestfile.cmake
+/DartConfiguration.tcl
+/Testing/
+
+# Optional local SDL headers (for IntelliSense before first CMake configure)
+/third_party/sdl2/
+
+# Visual Studio / MSBuild
+/.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+*.vcxproj.user
+*.vcxproj.filters
+*.vcxproj
+*.sln
+
+# Compiler outputs (when not under build/)
+*.obj
+*.o
+*.pch
+*.pdb
+*.ilk
+*.idb
+*.exp
+*.lib
+*.dll
+*.exe
+*.app
+*.dSYM/
+
+# Editor caches (project .vscode/*.json is tracked)
+.vscode/.browse.VC.db
+.vscode/ipch/
+.vscode/.ropeproject/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+~$*
