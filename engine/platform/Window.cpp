@@ -6,6 +6,44 @@
 
 namespace engine {
 
+namespace {
+
+bool TryMapKeyCode(SDL_Keycode sdl_key, KeyCode& key) {
+  switch (sdl_key) {
+    case SDLK_w:
+      key = KeyCode::W;
+      return true;
+    case SDLK_a:
+      key = KeyCode::A;
+      return true;
+    case SDLK_s:
+      key = KeyCode::S;
+      return true;
+    case SDLK_d:
+      key = KeyCode::D;
+      return true;
+    case SDLK_ESCAPE:
+      key = KeyCode::Escape;
+      return true;
+    case SDLK_UP:
+      key = KeyCode::Up;
+      return true;
+    case SDLK_DOWN:
+      key = KeyCode::Down;
+      return true;
+    case SDLK_LEFT:
+      key = KeyCode::Left;
+      return true;
+    case SDLK_RIGHT:
+      key = KeyCode::Right;
+      return true;
+    default:
+      return false;
+  }
+}
+
+}  // namespace
+
   Window::Window(const std::string& name, int width, int height)
     : width_(width), height_(height), title_(name) {
     Initialize(width, height, name);
@@ -46,7 +84,9 @@ void Window::Shutdown() {
   }
 }
 
-void Window::PollEvents() {
+void Window::PollEvents(Input& input) {
+  input.BeginFrame();
+
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     switch (event.type) {
@@ -69,6 +109,18 @@ void Window::PollEvents() {
       case SDL_KEYDOWN:
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           should_close_ = true;
+        }
+        if (!event.key.repeat) {
+          KeyCode key;
+          if (TryMapKeyCode(event.key.keysym.sym, key)) {
+            input.SetKeyDown(key);
+          }
+        }
+        break;
+      case SDL_KEYUP:
+        KeyCode key;
+        if (TryMapKeyCode(event.key.keysym.sym, key)) {
+          input.SetKeyUp(key);
         }
         break;
       default:

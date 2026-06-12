@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-
+#include "Input/Input.h"
 struct SDL_Window;
 
 namespace engine {
@@ -13,7 +13,7 @@ class Window {
   bool Initialize(int width, int height, const std::string& title);
   void Shutdown();
 
-  void PollEvents();
+  void PollEvents(Input& input);
   bool ShouldClose() const;
 
   int Width() const;

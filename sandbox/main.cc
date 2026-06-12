@@ -1,3 +1,6 @@
+#include "Scene/Components/SpriteComponent.h"
+#include "Scene/Components/TransformComponent.h"
+#include "Scene/Scene.h"
 #include "core/Log.h"
 #include "core/Timer.h"
 #include "platform/Renderer.h"
@@ -21,16 +24,53 @@ int main(int argc, char* argv[]) {
   engine::Timer timer;
   timer.Reset();
 
+  engine::Scene scene;
+  engine::Entity& monkey = scene.CreateEntity("Monkey");
+
+  engine::TransformComponent monkey_transform{};
+  monkey_transform.x = 576.0f;
+  monkey_transform.y = 296.0f;
+  monkey_transform.velocity_x = 0.0f;
+  monkey_transform.velocity_y = 0.0f;
+  monkey_transform.scale_x = 1.0f;
+  monkey_transform.scale_y = 1.0f;
+  monkey_transform.rotation = 0.0f;
+  scene.AddTransformComponent(monkey, monkey_transform);
+
+  engine::InputComponent monkey_input{};
+  scene.AddInputComponent(monkey, monkey_input);
+
+  const engine::TextureHandle monkey_texture = renderer.LoadTexture(
+      R"(C:\Users\ilyas\SumMonkey\Assets\Sprites\Monkey\Idle\monkey-idle_-1.png)");
+  if (!monkey_texture.IsValid()) {
+    engine::LogError("Failed to load monkey texture.");
+    return 1;
+  }
+
+  engine::SpriteComponent monkey_sprite{};
+  monkey_sprite.texture = monkey_texture;
+  monkey_sprite.width = 128;
+  monkey_sprite.height = 128;
+  monkey_sprite.rotation = 0;
+  monkey_sprite.scale_x = 1;
+  monkey_sprite.scale_y = 1;
+  monkey_sprite.color_r = 255;
+  scene.AddSpriteComponent(monkey, monkey_sprite);
+
   float fps_timer = 0.0f;
   int frame_count = 0;
-
+  engine::Input input;
   engine::LogInfo("Sandbox running. Press Escape or close the window to quit.");
 
   while (!window.ShouldClose()) {
     const float delta_time = timer.Tick();
 
-    window.PollEvents();
+    window.PollEvents(input);
+    scene.HandleInput(input, delta_time);
+    scene.Update(delta_time);
+
     renderer.BeginFrame();
+    scene.Render(renderer);
     renderer.EndFrame();
 
     frame_count++;
