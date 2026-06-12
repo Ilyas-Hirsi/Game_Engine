@@ -63,7 +63,7 @@ bool Window::Initialize(int width, int height, const std::string& title) {
   sdl_initialized_ = true;
 
   window_ = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                             width_, height_, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+                             width_, height_, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
   if (window_ == nullptr) {
     Shutdown();
     return false;

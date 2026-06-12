@@ -8,11 +8,11 @@
 #include "Texture.h"
 
 struct SDL_Renderer;
-struct SDL_Texture;
-
+struct SDL_Window;
 namespace engine {
 
 class Window;
+using SDL_GLContext = void*;
 
 class Renderer {
  public:
@@ -34,14 +34,19 @@ class Renderer {
   void EndFrame();
   void DrawSprite(TextureHandle texture, float x, float y, int width, int height);
 
-  SDL_Renderer* GetNativeRenderer() const;
 
  private:
-  SDL_Renderer* renderer_ = nullptr;
+  SDL_GLContext gl_context_ = nullptr;
   bool image_initialized_ = false;
-  std::vector<SDL_Texture*> textures_;
+  std::vector<unsigned int> textures_;
   std::unordered_map<std::string, TextureHandle> texture_cache_;
-
+  SDL_Window* window_ = nullptr;
+  unsigned int shader_program_ = 0;
+  unsigned int vertex_array_ = 0;
+  unsigned int vertex_buffer_ = 0;
+  unsigned int index_buffer_ = 0;
+  int viewport_width_ = 0;
+  int viewport_height_ = 0;
   std::uint8_t clear_r_ = 32;
   std::uint8_t clear_g_ = 32;
   std::uint8_t clear_b_ = 48;

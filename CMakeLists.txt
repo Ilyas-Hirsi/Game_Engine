@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(Game_Engine LANGUAGES CXX)
 
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -64,4 +65,9 @@ if(WIN32)
             $<TARGET_FILE:SDL2_image::SDL2_image>
             $<TARGET_FILE_DIR:Game_Engine>
     COMMENT "Copying SDL2_image.dll next to Game_Engine.exe")
+  add_custom_command(TARGET Game_Engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:glad>
+            $<TARGET_FILE_DIR:Game_Engine>
+    COMMENT "Copying glad.dll next to Game_Engine.exe")
 endif()
