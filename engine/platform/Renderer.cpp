@@ -5,6 +5,8 @@
 #include <glad/glad.h>
 #include <SDL.h>
 #include <SDL_image.h>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace engine {
 
@@ -22,6 +24,17 @@ void main() {
   gl_Position = vec4(a_position, 0.0, 1.0);
 }
 )";
+constexpr char kVertexShaderSourceDepth[] = R"(
+#version 330 core
+layout (location = 0) in vec3 a_position;
+layout (location = 1) in vec3 a_color;
+out vec3 v_color;
+uniform mat4 u_mvp;
+void main() {
+  v_color = a_color;
+  gl_Position = u_mvp * vec4(a_position, 1.0);
+}
+)";
 
 constexpr char kFragmentShaderSource[] = R"(
 #version 330 core
@@ -36,6 +49,14 @@ void main() {
 }
 )";
 
+constexpr char kFragmentShaderSourceDepth[] = R"(
+#version 330 core
+in vec3 v_color;
+out vec4 fragment_color;
+void main() {
+  fragment_color = vec4(v_color, 1.0);
+}
+)";
 GLuint CompileShader(GLenum type, const char* source) {
   const GLuint shader = glCreateShader(type);
   glShaderSource(shader, 1, &source, nullptr);
@@ -51,13 +72,13 @@ GLuint CompileShader(GLenum type, const char* source) {
   return shader;
 }
 
-GLuint CreateShaderProgram() {
-  const GLuint vertex_shader = CompileShader(GL_VERTEX_SHADER, kVertexShaderSource);
+GLuint CreateShaderProgram(const char* vertex_source, const char* fragment_source) {
+  const GLuint vertex_shader = CompileShader(GL_VERTEX_SHADER, vertex_source);
   if (vertex_shader == 0) {
     return 0;
   }
 
-  const GLuint fragment_shader = CompileShader(GL_FRAGMENT_SHADER, kFragmentShaderSource);
+  const GLuint fragment_shader = CompileShader(GL_FRAGMENT_SHADER, fragment_source);
   if (fragment_shader == 0) {
     glDeleteShader(vertex_shader);
     return 0;
@@ -112,8 +133,14 @@ bool Renderer::Initialize(Window& window) {
   SDL_GL_SetSwapInterval(1);
   glViewport(0, 0, viewport_width_, viewport_height_);
 
-  shader_program_ = CreateShaderProgram();
+  shader_program_ = CreateShaderProgram(kVertexShaderSource, kFragmentShaderSource);
   if (shader_program_ == 0) {
+    Shutdown();
+    return false;
+  }
+  mesh_shader_program_ =
+      CreateShaderProgram(kVertexShaderSourceDepth, kFragmentShaderSourceDepth);
+  if (mesh_shader_program_ == 0) {
     Shutdown();
     return false;
   }
@@ -138,6 +165,7 @@ bool Renderer::Initialize(Window& window) {
 
   glBindVertexArray(0);
   glEnable(GL_BLEND);
+  glEnable(GL_DEPTH_TEST);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   if ((IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG) != 0) {
@@ -151,6 +179,12 @@ void Renderer::Shutdown() {
   for (unsigned int texture : textures_) {
     glDeleteTextures(1, &texture);
   }
+  for (Mesh& mesh : meshes_) {
+    glDeleteVertexArrays(1, &mesh.vao);
+    glDeleteBuffers(1, &mesh.vbo);
+    glDeleteBuffers(1, &mesh.ebo);
+  }
+  meshes_.clear();
   textures_.clear();
 
   if (index_buffer_ != 0) {
@@ -168,6 +202,10 @@ void Renderer::Shutdown() {
   if (shader_program_ != 0) {
     glDeleteProgram(shader_program_);
     shader_program_ = 0;
+  }
+  if (mesh_shader_program_ != 0){
+    glDeleteProgram(mesh_shader_program_);
+    mesh_shader_program_ = 0;
   }
 
   if (gl_context_ != nullptr) {
@@ -233,9 +271,33 @@ TextureHandle Renderer::LoadTexture(const std::string& texture_path) {
   texture_cache_[texture_path] = handle;
   return handle;
 }
+MeshHandle Renderer::CreateMesh(const std::vector<float>& vertices,
+  const std::vector<unsigned int>& indices) {
+Mesh mesh;
+mesh.index_count = static_cast<int>(indices.size());
+glGenVertexArrays(1, &mesh.vao);
+glGenBuffers(1, &mesh.vbo);
+glGenBuffers(1, &mesh.ebo);
+glBindVertexArray(mesh.vao);
+glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float),
+vertices.data(), GL_STATIC_DRAW);
+glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
+glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int),
+indices.data(), GL_STATIC_DRAW);
+
+glEnableVertexAttribArray(0);
+glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
+glEnableVertexAttribArray(1);
+glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+    reinterpret_cast<void*>(3 * sizeof(float)));
+glBindVertexArray(0);
+meshes_.emplace_back(mesh);
+return MeshHandle{static_cast<std::uint32_t>(meshes_.size())};  // 1-based, like textures
+}
 
 void Renderer::BeginFrame() {
-
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glClearColor(clear_r_/255.0f, clear_g_/255.0f, clear_b_/255.0f, clear_a_/255.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -284,4 +346,33 @@ void Renderer::DrawSprite(TextureHandle texture, float x, float y, int width, in
   glBindVertexArray(0);
   }
 
+void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture,const glm::mat4& model){
+  (void)texture;  // colored meshes don't sample a texture yet
+  if (gl_context_ == nullptr || mesh_shader_program_ == 0 ||
+      !mesh.IsValid() || mesh.id > meshes_.size() ||
+      viewport_width_ <= 0 || viewport_height_ <= 0) {
+    return;
+  }
+
+  const Mesh& mesh_data = meshes_[mesh.id - 1];
+
+  const float aspect =
+      static_cast<float>(viewport_width_) / static_cast<float>(viewport_height_);
+  const glm::mat4 projection =
+      glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
+  const glm::mat4 view =
+      glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f));
+  const glm::mat4 mvp = projection * view * model;
+
+  glUseProgram(mesh_shader_program_);
+  glUniformMatrix4fv(
+      glGetUniformLocation(mesh_shader_program_, "u_mvp"),
+      1,
+      GL_FALSE,
+      glm::value_ptr(mvp));
+
+  glBindVertexArray(mesh_data.vao);
+  glDrawElements(GL_TRIANGLES, mesh_data.index_count, GL_UNSIGNED_INT, nullptr);
+  glBindVertexArray(0);
+ }
 }  // namespace engine

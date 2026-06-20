@@ -1,21 +1,23 @@
 #include "System.h"
-#include "../Components/ComponentType.h"
 #include "../Components/SpriteComponent.h"
 #include "../Components/TransformComponent.h"
+#include "../Components/MeshComponent.h"
 #include "../Entity.h"
 #include "../Scene.h"
 #include "../../platform/Renderer.h"
 #include <algorithm>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 namespace engine {
 
 void System::HandleInput(Scene& scene, Input& input, float delta_time) {
   for (auto& entity : scene.GetEntities()) {
-    if (!entity.HasComponent(ComponentType::Input) ||
-        !entity.HasComponent(ComponentType::Transform)) {
+    if (!scene.has<InputComponent>(entity) ||
+        !scene.has<TransformComponent>(entity)) {
       continue;
     }
-    TransformComponent& transform = scene.GetTransformComponents()[entity.GetComponentIndex(ComponentType::Transform)];
-    InputComponent& input_component = scene.GetInputComponents()[entity.GetComponentIndex(ComponentType::Input)];
+    TransformComponent& transform = scene.getComponent<TransformComponent>(entity);
+    InputComponent& input_component = scene.getComponent<InputComponent>(entity);
     if (input.IsKeyDown(input_component.up)) {
       transform.velocity_y = std::clamp(
           transform.velocity_y - transform.acceleration_y * delta_time,
@@ -46,35 +48,46 @@ void System::HandleInput(Scene& scene, Input& input, float delta_time) {
   }
 }
 void System::Update(Scene& scene, float delta_time) {
-  auto& transform_components = scene.GetTransformComponents();
-
   for (auto& entity : scene.GetEntities()) {
-    if (!entity.HasComponent(ComponentType::Transform)) {
+    if (!scene.has<TransformComponent>(entity)) {
       continue;
     }
 
-    TransformComponent& transform =
-        transform_components[entity.GetComponentIndex(ComponentType::Transform)];
+    TransformComponent& transform = scene.getComponent<TransformComponent>(entity);
     transform.x += transform.velocity_x * delta_time;
     transform.y += transform.velocity_y * delta_time;
   }
 }
 
 void System::Render(Scene& scene, Renderer& renderer) {
-  auto& sprite_components = scene.GetSpriteComponents();
-  auto& transform_components = scene.GetTransformComponents();
-
   for (auto& entity : scene.GetEntities()) {
-    if (!entity.HasComponent(ComponentType::Sprite) || 
-    !entity.HasComponent(ComponentType::Transform)) {
+    if (!scene.has<SpriteComponent>(entity) ||
+        !scene.has<TransformComponent>(entity)) {
       continue;
     }
 
-    SpriteComponent& sprite =
-        sprite_components[entity.GetComponentIndex(ComponentType::Sprite)];
-    TransformComponent& transform =
-        transform_components[entity.GetComponentIndex(ComponentType::Transform)];
+    SpriteComponent& sprite = scene.getComponent<SpriteComponent>(entity);
+    TransformComponent& transform = scene.getComponent<TransformComponent>(entity);
     renderer.DrawSprite(sprite.texture, transform.x, transform.y, sprite.width, sprite.height);
+  }
+
+  for (auto& entity : scene.GetEntities()) {
+    if (!scene.has<MeshComponent>(entity) ||
+        !scene.has<TransformComponent>(entity)) {
+      continue;
+    }
+
+    MeshComponent& mesh = scene.getComponent<MeshComponent>(entity);
+    TransformComponent& transform = scene.getComponent<TransformComponent>(entity);
+
+    glm::mat4 model = glm::translate(
+        glm::mat4(1.0f), glm::vec3(transform.x, transform.y, transform.z));
+    model = glm::rotate(model, glm::radians(transform.rotation_x), glm::vec3(1.0f, 0.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(transform.rotation_y), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(transform.rotation_z), glm::vec3(0.0f, 0.0f, 1.0f));
+    model = glm::scale(model, glm::vec3(transform.scale_x, transform.scale_y, transform.scale_z));
+
+    renderer.DrawMesh(mesh.mesh, mesh.texture, model);
   }
 }
 

@@ -49,6 +49,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glad)
 
+# Consume glm header-only: building it as a shared lib produces a DLL with no
+# import library (no exported symbols), which breaks linking on MSVC.
+set(GLM_BUILD_LIBRARY OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  glm
+  GIT_REPOSITORY https://github.com/g-truc/glm.git
+  GIT_TAG 1.0.1
+  GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(glm)
+
 add_subdirectory(engine)
 
 add_executable(Game_Engine sandbox/main.cc)

@@ -12,6 +12,7 @@ target_link_libraries(EnginePlatform PUBLIC
   SDL2_image::SDL2_image
   glad
   OpenGL::GL
+  glm::glm
 )
 
 add_library(EngineCore STATIC

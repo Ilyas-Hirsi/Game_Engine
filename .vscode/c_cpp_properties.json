@@ -8,7 +8,8 @@
         "${workspaceFolder}/third_party/sdl2/SDL2-2.30.10/include",
         "${workspaceFolder}/build/_deps/sdl2-src/include",
         "${workspaceFolder}/build/_deps/sdl2_image-src/include",
-        "${workspaceFolder}/build/_deps/glad-build/include"
+        "${workspaceFolder}/build/_deps/glad-build/include",
+        "${workspaceFolder}/build/_deps/glm-src"
       ],
       "defines": [],
       "cppStandard": "c++20",
