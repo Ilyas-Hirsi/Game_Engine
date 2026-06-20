@@ -2,6 +2,7 @@
 #include "../Components/SpriteComponent.h"
 #include "../Components/TransformComponent.h"
 #include "../Components/MeshComponent.h"
+#include "../Components/CameraComponent.h"
 #include "../Entity.h"
 #include "../Scene.h"
 #include "../../platform/Renderer.h"
@@ -56,6 +57,29 @@ void System::Update(Scene& scene, float delta_time) {
     TransformComponent& transform = scene.getComponent<TransformComponent>(entity);
     transform.x += transform.velocity_x * delta_time;
     transform.y += transform.velocity_y * delta_time;
+  }
+}
+
+void System::UpdateCamera(Scene& scene, Renderer& renderer) {
+  for (auto& entity : scene.GetEntities()) {
+    if (!scene.has<CameraComponent>(entity) ||
+        !scene.has<TransformComponent>(entity)) {
+      continue;
+    }
+
+    const CameraComponent& camera = scene.getComponent<CameraComponent>(entity);
+    const TransformComponent& transform =
+        scene.getComponent<TransformComponent>(entity);
+
+    const float aspect = renderer.GetAspectRatio();
+    const glm::mat4 projection = glm::perspective(
+        glm::radians(camera.fov), aspect, camera.near_plane, camera.far_plane);
+    const glm::mat4 view = glm::lookAt(
+        glm::vec3(transform.x, transform.y, transform.z),
+        glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    renderer.SetCamera(view, projection);
+    return;
   }
 }
 

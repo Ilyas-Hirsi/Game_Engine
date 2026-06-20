@@ -36,6 +36,7 @@ namespace engine {
     }
 
     void Scene::OnRender(Renderer& renderer) {
+        system_.UpdateCamera(*this, renderer);
         system_.Render(*this, renderer);
     }
     

@@ -8,7 +8,7 @@
 #include "Texture.h"
 #include "Mesh.h"
 #include <glm/glm.hpp>
-
+#include "MeshData.h"
 
 struct SDL_Renderer;
 struct SDL_Window;
@@ -23,7 +23,7 @@ class Renderer {
 
   Renderer(const Renderer&) = delete;
   Renderer& operator=(const Renderer&) = delete;
-
+  
   bool Initialize(Window& window);
   void Shutdown();
 
@@ -38,6 +38,10 @@ class Renderer {
   void EndFrame();
   void DrawSprite(TextureHandle texture, float x, float y, int width, int height);
   void DrawMesh(MeshHandle mesh, TextureHandle texture, const glm::mat4& model);
+  MeshHandle CreateMesh(const MeshData& mesh_data);
+
+  void SetCamera(const glm::mat4& view, const glm::mat4& projection);
+  float GetAspectRatio() const;
 
  private:
   SDL_GLContext gl_context_ = nullptr;
@@ -57,7 +61,8 @@ class Renderer {
   std::uint8_t clear_g_ = 32;
   std::uint8_t clear_b_ = 48;
   std::uint8_t clear_a_ = 255;
-
+  glm::mat4 view_matrix_{1.0f};
+  glm::mat4 projection_matrix_{1.0f};
 };
 
 }  // namespace engine

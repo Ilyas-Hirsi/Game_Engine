@@ -11,6 +11,7 @@ class System {
    void Update(Scene& scene, float delta_time);
    void HandleInput(Scene& scene, Input& input, float delta_time);
    void Render(Scene& scene, Renderer& renderer);
+   void UpdateCamera(Scene& scene, Renderer& renderer);
 };
 
 

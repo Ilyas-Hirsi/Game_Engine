@@ -12,6 +12,7 @@
 #include "../platform/Renderer.h"
 #include "Components/InputComponent.h"
 #include "Registery.h"
+#include "Components/CameraComponent.h"
 namespace engine {
 
     class Scene {
@@ -50,6 +51,7 @@ namespace engine {
         System system_;
         std::uint32_t next_entity_id_ = 0;
         std::vector<Entity> entities_;
-         ECSRegistry<InputComponent, TransformComponent, SpriteComponent, MeshComponent> registry_;
+         ECSRegistry<InputComponent, TransformComponent, SpriteComponent, 
+         MeshComponent, CameraComponent> registry_;
     };
 }

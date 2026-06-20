@@ -172,6 +172,13 @@ bool Renderer::Initialize(Window& window) {
     image_initialized_ = true;
   }
 
+  const float aspect =
+      static_cast<float>(viewport_width_) / static_cast<float>(viewport_height_);
+  projection_matrix_ =
+      glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
+  view_matrix_ = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f),
+                               glm::vec3(0.0f, 1.0f, 0.0f));
+
   return true;
 }
 
@@ -297,8 +304,8 @@ return MeshHandle{static_cast<std::uint32_t>(meshes_.size())};  // 1-based, like
 }
 
 void Renderer::BeginFrame() {
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glClearColor(clear_r_/255.0f, clear_g_/255.0f, clear_b_/255.0f, clear_a_/255.0f);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glClear(GL_COLOR_BUFFER_BIT);
 
 }
@@ -346,8 +353,21 @@ void Renderer::DrawSprite(TextureHandle texture, float x, float y, int width, in
   glBindVertexArray(0);
   }
 
+void Renderer::SetCamera(const glm::mat4& view, const glm::mat4& projection) {
+  view_matrix_ = view;
+  projection_matrix_ = projection;
+}
+
+float Renderer::GetAspectRatio() const {
+  if (viewport_width_ <= 0 || viewport_height_ <= 0) {
+    return 1.0f;
+  }
+  return static_cast<float>(viewport_width_) /
+         static_cast<float>(viewport_height_);
+}
+
 void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture,const glm::mat4& model){
-  (void)texture;  // colored meshes don't sample a texture yet
+  (void)texture;  // add !texture.IsValid() || texture.id > textures_.size() when textures are ready to be used
   if (gl_context_ == nullptr || mesh_shader_program_ == 0 ||
       !mesh.IsValid() || mesh.id > meshes_.size() ||
       viewport_width_ <= 0 || viewport_height_ <= 0) {
@@ -355,14 +375,7 @@ void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture,const glm::mat4& 
   }
 
   const Mesh& mesh_data = meshes_[mesh.id - 1];
-
-  const float aspect =
-      static_cast<float>(viewport_width_) / static_cast<float>(viewport_height_);
-  const glm::mat4 projection =
-      glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
-  const glm::mat4 view =
-      glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f));
-  const glm::mat4 mvp = projection * view * model;
+  const glm::mat4 mvp = projection_matrix_ * view_matrix_ * model;
 
   glUseProgram(mesh_shader_program_);
   glUniformMatrix4fv(
@@ -375,4 +388,39 @@ void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture,const glm::mat4& 
   glDrawElements(GL_TRIANGLES, mesh_data.index_count, GL_UNSIGNED_INT, nullptr);
   glBindVertexArray(0);
  }
+
+
+ MeshHandle Renderer::CreateMesh(const MeshData& mesh_data) {
+  Mesh mesh;
+  mesh.index_count = static_cast<int>(mesh_data.indices.size());
+  glGenVertexArrays(1, &mesh.vao);
+  glGenBuffers(1, &mesh.vbo);
+  glGenBuffers(1, &mesh.ebo);
+  glBindVertexArray(mesh.vao);
+
+  glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+  glBufferData(GL_ARRAY_BUFFER, mesh_data.vertices.size() * sizeof(float),
+               mesh_data.vertices.data(), GL_STATIC_DRAW);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+               mesh_data.indices.size() * sizeof(unsigned int),
+               mesh_data.indices.data(), GL_STATIC_DRAW);
+
+
+               const GLsizei stride =
+      static_cast<GLsizei>(mesh_data.Stride() * sizeof(float));
+  std::size_t offset = 0;
+  for (const VertexAttribute& attr : mesh_data.layout) {
+    glEnableVertexAttribArray(attr.location);
+    glVertexAttribPointer(attr.location, attr.component_count, GL_FLOAT,
+                          GL_FALSE, stride,
+                          reinterpret_cast<void*>(offset));
+    offset += static_cast<std::size_t>(attr.component_count) * sizeof(float);
+  }
+
+  glBindVertexArray(0);
+  meshes_.emplace_back(mesh);
+  return MeshHandle{static_cast<std::uint32_t>(meshes_.size())};
+  }
 }  // namespace engine
