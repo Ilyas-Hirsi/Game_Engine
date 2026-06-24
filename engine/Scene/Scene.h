@@ -5,7 +5,6 @@
 #include "Entity.h"
 #include "Systems/System.h"
 #include "Components/ComponentStorage.h"
-#include "Components/SpriteComponent.h"
 #include "Components/TransformComponent.h"
 #include "Components/MeshComponent.h"
 #include "../platform/Renderer.h"
@@ -13,6 +12,8 @@
 #include "Registery.h"
 #include "Components/CameraComponent.h"
 #include "Components/PhysicsComponent.h"
+#include "Components/TextureComponent.h"
+#include "Components/SpriteComponent.h"
 namespace engine {
 
     class Scene {
@@ -32,8 +33,8 @@ namespace engine {
             return registry_.emplace<T>(ent, std::forward<Args>(args)...);
         }
         template <typename T>
-        std::vector<std::optional<T>>& getComponents(){
-            return registry_.getComponents<T>();
+        SparseSet<T>& pool(){
+            return registry_.pool<T>();
         }
         template <typename T>
         bool has(const Entity& ent){
@@ -43,6 +44,10 @@ namespace engine {
         T& getComponent(const Entity& ent){
             return registry_.getComponent<T>(ent);
         }
+        template <typename... Components>
+            View<Components...> view() {
+                return registry_.view<Components...>();
+            }
         protected:
         virtual void OnUpdate(float deltaTime);
         virtual void OnRender(Renderer& renderer);
@@ -51,7 +56,7 @@ namespace engine {
         System system_;
         std::uint32_t next_entity_id_ = 0;
         std::vector<Entity> entities_;
-         ECSRegistry<InputComponent, TransformComponent, SpriteComponent, 
-         MeshComponent, CameraComponent, PhysicsComponent> registry_;
+         ECSRegistry<InputComponent, TransformComponent, TextureComponent,
+         MeshComponent, CameraComponent, PhysicsComponent, SpriteComponent> registry_;
     };
 }

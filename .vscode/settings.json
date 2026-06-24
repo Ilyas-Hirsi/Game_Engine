@@ -98,6 +98,9 @@
     "stop_token": "cpp",
     "thread": "cpp",
     "unordered_set": "cpp",
-    "xtree": "cpp"
+    "xtree": "cpp",
+    "filesystem": "cpp",
+    "ranges": "cpp",
+    "typeindex": "cpp"
   }
 }

@@ -28,11 +28,12 @@ constexpr char kVertexShaderSourceDepth[] = R"(
 #version 330 core
 layout (location = 0) in vec3 a_position;
 layout (location = 1) in vec3 a_color;
+layout (location = 2) in mat4 a_model;   // per-instance, consumes locations 2,3,4,5
 out vec3 v_color;
-uniform mat4 u_mvp;
+uniform mat4 u_viewProj;
 void main() {
   v_color = a_color;
-  gl_Position = u_mvp * vec4(a_position, 1.0);
+  gl_Position = u_viewProj * a_model * vec4(a_position, 1.0);
 }
 )";
 
@@ -138,12 +139,15 @@ bool Renderer::Initialize(Window& window) {
     Shutdown();
     return false;
   }
+  
   mesh_shader_program_ =
       CreateShaderProgram(kVertexShaderSourceDepth, kFragmentShaderSourceDepth);
   if (mesh_shader_program_ == 0) {
     Shutdown();
     return false;
   }
+  u_viewproj_loc_ = glGetUniformLocation(mesh_shader_program_, "u_viewProj");
+  glGenBuffers(1, &instance_vbo_);
 
   glGenVertexArrays(1, &vertex_array_);
   glGenBuffers(1, &vertex_buffer_);
@@ -201,6 +205,10 @@ void Renderer::Shutdown() {
   if (vertex_buffer_ != 0) {
     glDeleteBuffers(1, &vertex_buffer_);
     vertex_buffer_ = 0;
+  }
+  if (instance_vbo_ != 0) {
+    glDeleteBuffers(1, &instance_vbo_);
+    instance_vbo_ = 0;
   }
   if (vertex_array_ != 0) {
     glDeleteVertexArrays(1, &vertex_array_);
@@ -419,8 +427,36 @@ void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture,const glm::mat4& 
     offset += static_cast<std::size_t>(attr.component_count) * sizeof(float);
   }
 
+  // Per-instance model matrix: a mat4 occupies attribute locations 2..5, each
+  // a vec4, sourced from the shared instance buffer and advancing once per
+  // instance (divisor 1) rather than per vertex.
+  glBindBuffer(GL_ARRAY_BUFFER, instance_vbo_);
+  for (unsigned int i = 0; i < 4; ++i) {
+    glEnableVertexAttribArray(2 + i);
+    glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4),
+                          reinterpret_cast<void*>(i * sizeof(glm::vec4)));
+    glVertexAttribDivisor(2 + i, 1);
+  }
+
   glBindVertexArray(0);
   meshes_.emplace_back(mesh);
   return MeshHandle{static_cast<std::uint32_t>(meshes_.size())};
+  }
+  void Renderer::DrawMeshInstanced(MeshHandle mesh, TextureHandle texture, const std::vector<glm::mat4>& models){
+  if (models.empty() || mesh.id > meshes_.size() ) return;
+  const Mesh& m = meshes_[mesh.id - 1];
+  glUseProgram(mesh_shader_program_);
+    const glm::mat4 view_proj = projection_matrix_ * view_matrix_;
+    glUniformMatrix4fv(u_viewproj_loc_, 1, GL_FALSE, glm::value_ptr(view_proj));
+
+    glBindBuffer(GL_ARRAY_BUFFER, instance_vbo_);
+    glBufferData(GL_ARRAY_BUFFER, models.size() * sizeof(glm::mat4),
+                 models.data(), GL_DYNAMIC_DRAW);
+
+                 glBindVertexArray(m.vao);
+                 glDrawElementsInstanced(GL_TRIANGLES, m.index_count,
+                                         GL_UNSIGNED_INT, nullptr,
+                                         static_cast<GLsizei>(models.size()));
+                 glBindVertexArray(0);
   }
 }  // namespace engine

@@ -1,5 +1,4 @@
 #include "Scene.h"
-#include "Components/SpriteComponent.h"
 #include "Components/TransformComponent.h"
 namespace engine {
     Scene::Scene() {

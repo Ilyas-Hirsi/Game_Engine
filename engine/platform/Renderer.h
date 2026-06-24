@@ -38,6 +38,7 @@ class Renderer {
   void EndFrame();
   void DrawSprite(TextureHandle texture, float x, float y, int width, int height);
   void DrawMesh(MeshHandle mesh, TextureHandle texture, const glm::mat4& model);
+  void DrawMeshInstanced(MeshHandle mhes, TextureHandle texture, const std::vector<glm::mat4>& models);
   MeshHandle CreateMesh(const MeshData& mesh_data);
 
   void SetCamera(const glm::mat4& view, const glm::mat4& projection);
@@ -55,8 +56,10 @@ class Renderer {
   unsigned int vertex_array_ = 0;
   unsigned int vertex_buffer_ = 0;
   unsigned int index_buffer_ = 0;
+  unsigned int instance_vbo_ = 0;  // shared per-instance model matrices for instanced meshes
   int viewport_width_ = 0;
   int viewport_height_ = 0;
+  int u_viewproj_loc_ = -1;
   std::uint8_t clear_r_ = 32;
   std::uint8_t clear_g_ = 32;
   std::uint8_t clear_b_ = 48;

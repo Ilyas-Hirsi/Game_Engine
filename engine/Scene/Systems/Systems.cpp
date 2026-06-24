@@ -4,11 +4,11 @@
 #include "../Components/MeshComponent.h"
 #include "../Components/CameraComponent.h"
 #include "../Components/PhysicsComponent.h"
+#include "../Components/TextureComponent.h"
 #include "../Entity.h"
 #include "../Scene.h"
 #include "../../platform/Renderer.h"
 #include <algorithm>
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <ranges>
 namespace engine {
@@ -54,13 +54,10 @@ void System::HandleInput(Scene& scene, Input& input, float delta_time) {
   }
 }
 void System::Update(Scene& scene, float delta_time) {
-  for (auto& entity : scene.GetEntities()) {
-    if (!scene.has<TransformComponent>(entity)) {
-      continue;
-    }
-    TransformComponent& transform = scene.getComponent<TransformComponent>(entity);
-    transform.position += transform.move_direction * transform.velocity * delta_time;
-  }
+  scene.view<TransformComponent>().each(
+      [&](uint32_t, TransformComponent& t) {
+          t.position += t.move_direction * t.velocity * delta_time;
+      });
 }
 
 void System::UpdateCamera(Scene& scene, Renderer& renderer) {
@@ -88,35 +85,37 @@ void System::UpdateCamera(Scene& scene, Renderer& renderer) {
 }
 
 void System::Render(Scene& scene, Renderer& renderer) {
-  for (auto& entity : scene.GetEntities()) {
-    if (!scene.has<SpriteComponent>(entity) ||
-        !scene.has<TransformComponent>(entity)) {
-      continue;
-    }
+  
+  scene.view<SpriteComponent, TransformComponent>().each(
+    [&](uint32_t, SpriteComponent& sprite, TransformComponent& transform) {
+        renderer.DrawSprite(sprite.texture, transform.position.x, transform.position.y,
+                            sprite.width, sprite.height);
+    });
 
-    SpriteComponent& sprite = scene.getComponent<SpriteComponent>(entity);
-    TransformComponent& transform = scene.getComponent<TransformComponent>(entity);
-    renderer.DrawSprite(sprite.texture, transform.position.x, transform.position.y, sprite.width, sprite.height);
+    // Batching meshes with the same texture to improve performance
+  auto& texture_pool = scene.pool<TextureComponent>();
+  scene.view<MeshComponent, TransformComponent>().each(
+      [&](uint32_t entity, MeshComponent& mesh, TransformComponent& transform) {
+          glm::mat4 model = glm::translate(glm::mat4(1.0f), transform.position);
+          model = glm::rotate(model, glm::radians(transform.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+          model = glm::rotate(model, glm::radians(transform.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+          model = glm::rotate(model, glm::radians(transform.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+          model = glm::scale(model, transform.scale);
+  
+          std::uint32_t tex = texture_pool.contains(entity)
+              ? texture_pool.get(entity).texture.id : 0;
+          std::uint64_t key = (std::uint64_t(mesh.mesh.id) << 32) | tex;
+          batches[key].push_back(model);
+      });
+  
+  for (auto& [key, models] : batches) {
+      MeshHandle mesh{ std::uint32_t(key >> 32) };
+      TextureHandle texture{ std::uint32_t(key & 0xFFFFFFFF) };
+      renderer.DrawMeshInstanced(mesh, texture, models);
   }
-
-  for (auto& entity : scene.GetEntities()) {
-    if (!scene.has<MeshComponent>(entity) ||
-        !scene.has<TransformComponent>(entity)) {
-      continue;
-    }
-
-    MeshComponent& mesh = scene.getComponent<MeshComponent>(entity);
-    TransformComponent& transform = scene.getComponent<TransformComponent>(entity);
-
-    glm::mat4 model = glm::translate(
-        glm::mat4(1.0f), transform.position);
-    model = glm::rotate(model, glm::radians(transform.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(transform.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(transform.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-    model = glm::scale(model, transform.scale);
-
-    renderer.DrawMesh(mesh.mesh, mesh.texture, model);
-  }
+  batches.reserve(batches.size());
+  batches.clear();
+  
 }
 
 }  // namespace engine

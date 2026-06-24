@@ -9,9 +9,9 @@ namespace {
 
 constexpr float kMaxDeltaSeconds = 0.1f;
 
-float NowSeconds() {
+double NowSeconds() {
   using Clock = std::chrono::steady_clock;
-  return std::chrono::duration<float>(Clock::now().time_since_epoch()).count();
+  return std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
 }
 
 }  // namespace
@@ -24,7 +24,7 @@ void Timer::Reset() {
 }
 
 float Timer::Tick() {
-  const float now = NowSeconds();
+  const double now = NowSeconds();
 
   if (first_tick_) {
     first_tick_ = false;
@@ -33,7 +33,7 @@ float Timer::Tick() {
     return delta_time_;
   }
 
-  delta_time_ = now - last_time_;
+  delta_time_ = static_cast<float>(now - last_time_);
   delta_time_ = std::min(delta_time_, kMaxDeltaSeconds);
   last_time_ = now;
   total_time_ += delta_time_;
