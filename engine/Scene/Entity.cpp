@@ -1,10 +1,6 @@
 #include "Entity.h"
 
 namespace engine {
-    Entity::Entity(int id, const std::string& name) : id_(id), 
-    name_(name) {}
+    Entity::Entity(std::uint32_t id) : id_(id) {}
     int Entity::GetId() const { return id_; }
-    
-
 }
-

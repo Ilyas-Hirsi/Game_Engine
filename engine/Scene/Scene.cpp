@@ -8,8 +8,8 @@ namespace engine {
     Scene::~Scene() {
     }
 
-    Entity& Scene::CreateEntity(const std::string& name) {
-        entities_.emplace_back(next_entity_id_++, name);
+    Entity& Scene::CreateEntity() {
+        entities_.emplace_back(next_entity_id_++);
         return entities_.back();
     }
 
@@ -40,5 +40,4 @@ namespace engine {
         system_.Render(*this, renderer);
     }
     
-
 }

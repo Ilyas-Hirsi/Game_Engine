@@ -1,5 +1,4 @@
 #pragma once
-#include <string>
 #include <vector>
 #include <optional>
 #include <utility>
@@ -13,6 +12,7 @@
 #include "Components/InputComponent.h"
 #include "Registery.h"
 #include "Components/CameraComponent.h"
+#include "Components/PhysicsComponent.h"
 namespace engine {
 
     class Scene {
@@ -20,7 +20,7 @@ namespace engine {
         public:
         Scene();
         virtual ~Scene();
-        Entity& CreateEntity(const std::string& name);
+        Entity& CreateEntity();
         System& GetSystem();
         std::vector<Entity>& GetEntities();
         const std::vector<Entity>& GetEntities() const;
@@ -52,6 +52,6 @@ namespace engine {
         std::uint32_t next_entity_id_ = 0;
         std::vector<Entity> entities_;
          ECSRegistry<InputComponent, TransformComponent, SpriteComponent, 
-         MeshComponent, CameraComponent> registry_;
+         MeshComponent, CameraComponent, PhysicsComponent> registry_;
     };
 }

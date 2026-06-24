@@ -8,5 +8,7 @@ namespace engine {
         KeyCode down = KeyCode::S;
         KeyCode left = KeyCode::A;
         KeyCode right = KeyCode::D;
+        KeyCode rotate_left = KeyCode::Left;
+        KeyCode rotate_right = KeyCode::Right;
     };
 }

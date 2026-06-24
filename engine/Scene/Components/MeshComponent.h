@@ -9,7 +9,6 @@ struct MeshComponent {
     std::uint32_t entity_id = 0;
     MeshHandle mesh;
     TextureHandle texture;
-    MeshData mesh_data;
 };
 
 }  // namespace engine

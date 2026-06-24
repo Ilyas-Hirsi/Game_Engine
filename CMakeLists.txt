@@ -62,8 +62,19 @@ FetchContent_MakeAvailable(glm)
 
 add_subdirectory(engine)
 
-add_executable(Game_Engine sandbox/main.cc)
+add_executable(Game_Engine
+  sandbox/main.cc
+)
 target_link_libraries(Game_Engine PRIVATE EngineCore)
+target_compile_definitions(Game_Engine PRIVATE
+  GAME_ENGINE_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+add_custom_command(TARGET Game_Engine POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_SOURCE_DIR}/assets
+          $<TARGET_FILE_DIR:Game_Engine>/assets
+  COMMENT "Copying assets next to Game_Engine.exe")
 
 if(WIN32)
   add_custom_command(TARGET Game_Engine POST_BUILD

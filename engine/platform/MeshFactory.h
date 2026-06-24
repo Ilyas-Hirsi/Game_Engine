@@ -65,7 +65,7 @@ namespace engine::MeshFactory {
 
     // UV sphere of unit diameter (radius 0.5). `segments` controls both the
     // number of stacks and sectors, so higher = smoother (and more vertices).
-    inline MeshData Sphere(int segments = 64) {
+    inline MeshData Sphere(int segments = 32) {
         MeshData mesh;
         mesh.layout = {{0, 3}, {1, 3}};
 
