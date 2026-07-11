@@ -1,5 +1,7 @@
 # Game_Engine
 
+Development roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
+
 ## Build on Windows (PowerShell)
 
 ### Step 1 — Install CMake (done if `cmake --version` works)

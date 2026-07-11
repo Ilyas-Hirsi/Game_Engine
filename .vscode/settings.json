@@ -101,6 +101,7 @@
     "xtree": "cpp",
     "filesystem": "cpp",
     "ranges": "cpp",
-    "typeindex": "cpp"
+    "typeindex": "cpp",
+    "variant": "cpp"
   }
 }

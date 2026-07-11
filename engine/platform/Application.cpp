@@ -24,13 +24,17 @@ int Application::Run() {
     // main loop
     while (!window_.ShouldClose()) {
         const float delta_time = timer_.Tick();
-        window_.PollEvents();
+        window_.PollEvents(input_);
         OnUpdate(delta_time);
         renderer_.BeginFrame();
         OnRender();
         renderer_.EndFrame();
     }
     return exit_code_;
+}
+
+void Application::OnUpdate(float delta_time) {
+    system_.HandleInput(scene_,input_, delta_time);
 }
 
 Renderer& Application::GetRenderer() { return renderer_; }

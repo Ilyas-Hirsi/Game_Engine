@@ -37,6 +37,12 @@ bool TryMapKeyCode(SDL_Keycode sdl_key, KeyCode& key) {
     case SDLK_RIGHT:
       key = KeyCode::Right;
       return true;
+    case SDLK_q:
+      key = KeyCode::Q;
+      return true;
+    case SDLK_e:
+      key = KeyCode::E;
+      return true;
     default:
       return false;
   }

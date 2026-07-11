@@ -14,20 +14,31 @@
 #include "Components/PhysicsComponent.h"
 #include "Components/TextureComponent.h"
 #include "Components/SpriteComponent.h"
+#include "Components/ColliderComponent.h"
 namespace engine {
+    class PhysicsSettings {
+        public:
+        glm::vec3 gravity = glm::vec3(0.0f, -40.81f, 0.0f);
+        float fixed_dt = 1.0f / 60.0f;
+        float restitution = 0.2f;
+    };
 
     class Scene {
 
         public:
         Scene();
         virtual ~Scene();
-        Entity& CreateEntity();
+        Entity CreateEntity();
+        void DestroyEntity(Entity& entity);
         System& GetSystem();
-        std::vector<Entity>& GetEntities();
-        const std::vector<Entity>& GetEntities() const;
+        EntityStorage& GetEntities();
+        const EntityStorage& GetEntities() const;
         void HandleInput(Input& input, float deltaTime);
         void Update(float deltaTime);
-        void Render(Renderer& renderer);
+        void FixedUpdate(float fixed_dt);
+        void Render(Renderer& renderer, float alpha = 0.0f);
+        PhysicsSettings& GetPhysicsSettings() {return physics_settings_;};
+        const PhysicsSettings& GetPhysicsSettings() const {return physics_settings_;};
         template <typename T, typename... Args>
         T& emplace(const Entity& ent, Args&&... args){
             return registry_.emplace<T>(ent, std::forward<Args>(args)...);
@@ -50,13 +61,15 @@ namespace engine {
             }
         protected:
         virtual void OnUpdate(float deltaTime);
-        virtual void OnRender(Renderer& renderer);
+        virtual void OnRender(Renderer& renderer, float alpha = 0.0f);
 
         private:
         System system_;
         std::uint32_t next_entity_id_ = 0;
-        std::vector<Entity> entities_;
-         ECSRegistry<InputComponent, TransformComponent, TextureComponent,
-         MeshComponent, CameraComponent, PhysicsComponent, SpriteComponent> registry_;
+        EntityStorage entities_;
+        ECSRegistry<InputComponent, TransformComponent, TextureComponent,
+        MeshComponent, CameraComponent, RigidBodyComponent, SpriteComponent,
+        ColliderComponent, MovementComponent> registry_;
+        PhysicsSettings physics_settings_;
     };
 }

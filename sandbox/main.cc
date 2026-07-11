@@ -1,4 +1,5 @@
 #include "Scene/Components/CameraComponent.h"
+#include "Scene/Components/ColliderComponent.h"
 #include "Scene/Components/InputComponent.h"
 #include "Scene/Components/MeshComponent.h"
 #include "Scene/Components/TransformComponent.h"
@@ -8,28 +9,22 @@
 #include "platform/MeshFactory.h"
 #include "platform/Renderer.h"
 #include "platform/Window.h"
-
-#include <algorithm>
-#include <iomanip>
-#include <limits>
+#include <iostream>
 #include <random>
-#include <sstream>
-#include <string>
 
-// Cube stress test.
+
 int main(int argc, char* argv[]) {
   (void)argc;
   (void)argv;
 
-  //  Stress test knobs 
-  const int   kCubesPerFrame = 1000;     // how many cubes to spawn each frame
-  const float kTargetFps     = 60.0f;   
-  const float kWarmupSeconds = 1.0f;   
-  const int   kMaxCubes      = 100000;  // hard cap so a fast GPU can't OOM us
-  const float kHalfExtent    = 50.0f;   // cubes spawn inside a +/-50 unit box
-  // -
+  // Arena is a +/-kHalf box. The floor sits at y = -kHalf; four invisible
+  // wall planes face inward so nothing escapes sideways.
+  const float kHalf        = 100.0f;
+  const float kSphereScale = 4.0f;                 // mesh radius 0.5 -> visual 2.0
+  const float kRadius      = 0.5f * kSphereScale;  // collider radius matches
+  const int   kSphereCount = 1500;
 
-  engine::Window window("Cube Stress Test", 1280, 720);
+  engine::Window window("Collision Demo", 1280, 720);
 
   engine::Renderer renderer;
   if (!renderer.Initialize(window)) {
@@ -39,12 +34,13 @@ int main(int argc, char* argv[]) {
 
   engine::Scene scene;
 
-
-  engine::Entity& camera = scene.CreateEntity();
+  // --- Camera ---------------------------------------------------------------
+  engine::Entity camera = scene.CreateEntity();
   engine::TransformComponent camera_transform{};
-  camera_transform.position = glm::vec3(0.0f, 0.0f, 120.0f);
-  camera_transform.facing = glm::vec3(0.0f, 0.0f, -1.0f);
-  camera_transform.velocity = 40.0f;
+  engine::MovementComponent camera_movement{};
+  camera_transform.position = glm::vec3(0.0f, 20.0f, 130.0f);
+  camera_movement.facing = glm::normalize(glm::vec3(0.0f, -0.25f, -1.0f));
+  camera_movement.speed = 40.0f;
   scene.emplace<engine::TransformComponent>(camera, camera_transform);
 
   engine::CameraComponent camera_component{};
@@ -52,137 +48,104 @@ int main(int argc, char* argv[]) {
   camera_component.near_plane = 0.1f;
   camera_component.far_plane = 1000.0f;
   scene.emplace<engine::CameraComponent>(camera, camera_component);
+  engine::RigidBodyComponent camera_rigid_body{};
+  camera_rigid_body.inverse_mass = 0.0f;
+  scene.emplace<engine::RigidBodyComponent>(camera, camera_rigid_body);
+  scene.emplace<engine::MovementComponent>(camera, camera_movement);
+  scene.emplace<engine::InputComponent>(camera, engine::InputComponent{});
 
-  engine::InputComponent camera_input{};
-  scene.emplace<engine::InputComponent>(camera, camera_input);
+  // --- Floor (visible plane mesh + static plane collider) -------------------
+  const engine::MeshHandle plane_mesh =
+      renderer.CreateMesh(engine::MeshFactory::Plane());
 
+  engine::Entity floor = scene.CreateEntity();
+  engine::TransformComponent floor_transform{};
+  floor_transform.position = glm::vec3(0.0f, -kHalf, 0.0f);
+  floor_transform.scale = glm::vec3(2.0f * kHalf, 1.0f, 2.0f * kHalf);
+  scene.emplace<engine::TransformComponent>(floor, floor_transform);
 
-  // One shared cube mesh on the GPU. Every cube entity reuses this handle, so
-  // the test measures per-entity iteration + draw-call cost, not buffer uploads.
-  const engine::MeshData cube_mesh_data = engine::MeshFactory::Sphere(16);
-  const engine::MeshHandle cube_mesh = renderer.CreateMesh(cube_mesh_data);
-  const engine::TextureHandle cube_texture = renderer.LoadTexture("C:/Users/ilyas/SumMonkey/Assets/Sprites/Monkey/Idle/monkey-idle_-1.png");
+  engine::MeshComponent floor_mesh{};
+  floor_mesh.mesh = plane_mesh;
+  floor_mesh.entity_id = floor.GetId();
+  scene.emplace<engine::MeshComponent>(floor, floor_mesh);
+
+  engine::ColliderComponent floor_collider{};
+  floor_collider.shape = engine::Plane{glm::vec3(0.0f, 1.0f, 0.0f), -kHalf};
+  floor_collider.is_static = true;
+  scene.emplace<engine::ColliderComponent>(floor, floor_collider);
+
+  // --- Containment walls (invisible static plane colliders) -----------------
+  auto add_wall = [&](glm::vec3 normal) {
+    engine::Entity wall = scene.CreateEntity();
+    scene.emplace<engine::TransformComponent>(wall, engine::TransformComponent{});
+    engine::ColliderComponent collider{};
+    collider.shape = engine::Plane{normal, -kHalf};
+    collider.is_static = true;
+    scene.emplace<engine::ColliderComponent>(wall, collider);
+  };
+  add_wall(glm::vec3( 1.0f, 0.0f,  0.0f));  // left  (x >= -kHalf)
+  add_wall(glm::vec3(-1.0f, 0.0f,  0.0f));  // right (x <=  kHalf)
+  add_wall(glm::vec3( 0.0f, 0.0f,  1.0f));  // back  (z >= -kHalf)
+  add_wall(glm::vec3( 0.0f, 0.0f, -1.0f));  // front (z <=  kHalf)
+
+  // --- Falling spheres ------------------------------------------------------
+  const engine::MeshHandle sphere_mesh =
+      renderer.CreateMesh(engine::MeshFactory::Sphere());
 
   std::mt19937 rng(1337u);
-  std::uniform_real_distribution<float> pos(-kHalfExtent, kHalfExtent);
-  std::uniform_real_distribution<float> spin(0.0f, 360.0f);
+  std::uniform_real_distribution<float> spread(-kHalf + kRadius, kHalf - kRadius);
+  std::uniform_real_distribution<float> height(10.0f, 80.0f);
 
-  auto spawn_cube = [&]() {
-    // Grab the reference and consume it immediately: the two emplace() calls use
-    // cube.GetId() before any further CreateEntity() can invalidate it.
-    engine::Entity& cube = scene.CreateEntity();
+  for (int i = 0; i < kSphereCount; ++i) {
+    engine::Entity sphere = scene.CreateEntity();
+
     engine::TransformComponent transform{};
-    transform.position = glm::vec3(pos(rng), pos(rng), pos(rng));
-    transform.rotation = glm::vec3(spin(rng), spin(rng), spin(rng));
-    transform.scale = glm::vec3(1.0f);
-    scene.emplace<engine::TransformComponent>(cube, transform);
+    transform.position = glm::vec3(spread(rng), height(rng), spread(rng));
+    transform.scale = glm::vec3(kSphereScale);
+    scene.emplace<engine::TransformComponent>(sphere, transform);
 
     engine::MeshComponent mesh{};
-    mesh.mesh = cube_mesh;
-    mesh.entity_id = cube.GetId();
-    scene.emplace<engine::MeshComponent>(cube, mesh);
-    engine::TextureComponent texture{};
-    texture.texture = cube_texture;
-    scene.emplace<engine::TextureComponent>(cube, texture);
-  };
+    mesh.mesh = sphere_mesh;
+    mesh.entity_id = sphere.GetId();
+    scene.emplace<engine::MeshComponent>(sphere, mesh);
+
+    engine::ColliderComponent collider{};
+    collider.shape = engine::Sphere{kRadius};
+    scene.emplace<engine::ColliderComponent>(sphere, collider);
+    engine::RigidBodyComponent rigid_body{};
+    rigid_body.inverse_mass = 1.0f;
+    scene.emplace<engine::RigidBodyComponent>(sphere, rigid_body);
+  }
+
+  engine::LogInfo("Collision demo: spheres fall into a walled pen. WASD/arrows move the camera.");
 
   engine::Timer timer;
   timer.Reset();
-
   engine::Input input;
 
-  // Frame metrics over one reporting window. FPS is derived from frames counted
-  // against accumulated wall time (frames / seconds), which is the honest
-  // throughput number. Reading 1/delta of a single frame is noisy and, with a
-  // clamped delta, can report a fixed wrong value regardless of real speed.
-  struct FrameStats {
-    int   frames   = 0;
-    float seconds  = 0.0f;
-    float best_dt  = std::numeric_limits<float>::max();  // fastest frame
-    float worst_dt = 0.0f;                               // slowest frame
-
-    void Add(float dt) {
-      ++frames;
-      seconds += dt;
-      best_dt = std::min(best_dt, dt);
-      worst_dt = std::max(worst_dt, dt);
-    }
-    void Reset() { *this = FrameStats{}; }
-    float Fps() const { return seconds > 0.0f ? frames / seconds : 0.0f; }
-    float AvgMs() const { return frames > 0 ? seconds * 1000.0f / frames : 0.0f; }
-    float BestMs() const { return frames > 0 ? best_dt * 1000.0f : 0.0f; }
-    float WorstMs() const { return worst_dt * 1000.0f; }
-  };
-
-  FrameStats  stats;                       // accumulates within the window
-  bool        growing       = true;
-  int         cube_count    = 0;
-  float       elapsed       = 0.0f;        // total run time (warmup gate)
-  float       report_timer  = 0.0f;
-  const float kReportInterval = 0.5f;      // seconds between reports
-
-  engine::LogInfo(
-      "Cube stress test running. NOTE: VSync is on, so FPS is capped at the "
-      "monitor refresh rate (frame time floors near the refresh interval). The "
-      "test grows the cube count until the windowed average FPS drops below the "
-      "target.");
-
+  float accumulator = 0.0f;
+  const float kFixedDt = scene.GetPhysicsSettings().fixed_dt;
   while (!window.ShouldClose()) {
     const float delta_time = timer.Tick();
-    elapsed += delta_time;
+    float frame_dt = std::min(delta_time, 0.25f);
+    accumulator += frame_dt;
 
     window.PollEvents(input);
     scene.HandleInput(input, delta_time);
-
-    if (growing) {
-      for (int i = 0; i < kCubesPerFrame && cube_count < kMaxCubes; ++i) {
-        spawn_cube();
-        ++cube_count;
-      }
-    }
-
     scene.Update(delta_time);
+    while (accumulator >= kFixedDt) {
+      scene.FixedUpdate(kFixedDt);
+      accumulator -= kFixedDt;
+  }
+  const float alpha = accumulator / kFixedDt;
 
     renderer.BeginFrame();
-    scene.Render(renderer);
+    scene.Render(renderer, alpha);
     renderer.EndFrame();
-
-    stats.Add(delta_time);
-    report_timer += delta_time;
-    if (report_timer >= kReportInterval) {
-      std::ostringstream stream;
-      stream << std::fixed << std::setprecision(1)
-             << (growing ? "[growing] " : "[stable]  ")
-             << "cubes: " << cube_count
-             << "  fps: " << stats.Fps()
-             << "  frame ms avg/best/worst: " << stats.AvgMs() << " / "
-             << stats.BestMs() << " / " << stats.WorstMs();
-      engine::LogInfo(stream.str());
-
-      // End the growth phase once the windowed average can no longer hold the
-      // target (after a warmup so startup hitches don't trip it early).
-      if (growing) {
-        const bool fps_dropped =
-            elapsed > kWarmupSeconds && stats.Fps() < kTargetFps;
-        if (fps_dropped || cube_count >= kMaxCubes) {
-          growing = false;
-          std::ostringstream result;
-          result << std::fixed << std::setprecision(1)
-                 << "RESULT: sustained " << cube_count << " cubes at "
-                 << stats.Fps() << " fps (avg frame " << stats.AvgMs()
-                 << " ms, worst " << stats.WorstMs() << " ms, target "
-                 << kTargetFps << " fps).";
-          engine::LogInfo(result.str());
-        }
-      }
-
-      stats.Reset();
-      report_timer = 0.0f;
-    }
   }
 
   renderer.Shutdown();
   window.Shutdown();
-  engine::LogInfo("Stress test complete.");
+  engine::LogInfo("Collision demo complete.");
   return 0;
 }

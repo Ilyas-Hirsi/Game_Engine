@@ -2,13 +2,19 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 namespace engine {
-    struct PhysicsComponent {
+    struct RigidBodyComponent {
         std::uint32_t entity_id;
-        glm::vec3 position;
-        glm::vec3 move_direction = glm::vec3(0.0f, 0.0f, 0.0f);
-        glm::vec3 velocity       = glm::vec3(0.0f);
-        glm::vec3 max_velocity   = glm::vec3(100.0f);
+        glm::vec3 previous_position = glm::vec3(0.0f);
+        glm::vec3 linear_velocity       = glm::vec3(0.0f);
         glm::vec3 acceleration   = glm::vec3(0.0f);
-        float speed_scalar       = 0.0f;
+        float gravity_scale = 1.0f;
+        float restitution = 0.2f;
+        float inverse_mass = 1.0f;
+    };
+    struct MovementComponent {
+        std::uint32_t entity_id;
+        glm::vec3 move_direction = glm::vec3(0.0f, 0.0f, 0.0f);
+        glm::vec3 facing = glm::vec3(0.0f, 0.0f, -1.0f);
+        float speed              = 0.0f;
     };
 }  // namespace engine

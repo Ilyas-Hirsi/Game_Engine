@@ -6,37 +6,46 @@
 #include <limits>
 #include <utility>
 #include "Entity.h"
+#include "core/Assert.h"
 namespace engine {
 
 template <class T> struct SparseSet {
     static constexpr uint32_t NONE = std::numeric_limits<uint32_t>::max();
 
-    std::vector<uint32_t> sparse; // sprase set of entity ids
-    std::vector<uint32_t> dense_entities; // dense set of entity ids
+    std::vector<entity_t> sparse; // sprase set of entity ids
+    std::vector<entity_t> dense_entities; // dense set of entity ids
     std::vector<T>        dense;           // dense set of components
 
-    bool contains(uint32_t e) const { return e < sparse.size() && sparse[e] != NONE; }
-    T&   get(uint32_t e)            { return dense[sparse[e]]; }
+    bool contains(entity_t e) const { return index_of(e) < sparse.size() && sparse[index_of(e)] != NONE; }
+    T&   get(entity_t e)            { 
+        ENGINE_ASSERT(contains(e), "Entity not found in SparseSet");
+        return dense[sparse[index_of(e)]]; }
 
-    T& emplace(uint32_t e, T v) {
-        if (e >= sparse.size()) sparse.resize(e + 1, NONE);
-        sparse[e] = static_cast<uint32_t>(dense.size());
+    // attempt to get a component, return nullptr if not found
+    T* try_get(entity_t e) {
+        if (!contains(e)) return nullptr;
+        return &dense[sparse[index_of(e)]];
+    }
+
+    T& emplace(entity_t e, T v) {
+        if (index_of(e) >= sparse.size()) sparse.resize(index_of(e) + 1, NONE);
+        sparse[index_of(e)] = static_cast<uint32_t>(dense.size());
         dense_entities.push_back(e);
         dense.push_back(std::move(v));
         return dense.back();
     }
 
-    void remove(uint32_t e) {
-        uint32_t index = sparse[e];
+    void remove(entity_t e) {
+        uint32_t index = sparse[index_of(e)];
         uint32_t last  = static_cast<uint32_t>(dense.size() - 1);
 
         dense_entities[index] = dense_entities[last];
         dense[index]          = std::move(dense[last]);
-        sparse[dense_entities[index]] = index;
+        sparse[index_of(dense_entities[index])] = index;
 
         dense_entities.pop_back();
         dense.pop_back();
-        sparse[e] = NONE;
+        sparse[index_of(e)] = NONE;
     }
 };
 
@@ -50,7 +59,7 @@ class View {
         auto* lead = std::get<0>(pools_);
 
         for (std::size_t i = lead->dense_entities.size(); i-- > 0; ) {
-            uint32_t e = lead->dense_entities[i];
+            entity_t e = lead->dense_entities[i];
             if ((std::get<SparseSet<Components>*>(pools_)->contains(e) && ...)) {
                 func(e, std::get<SparseSet<Components>*>(pools_)->get(e)...);
             }
@@ -89,6 +98,18 @@ class ECSRegistry {
     View<Components...> view() {
         return View<Components...>(pool<Components>()...);
     }
-};
+   template <typename T>
+   void remove(const Entity& entity) {
+    auto& p = pool<T>();
+    if (p.contains(entity.GetId())) {
+        p.remove(entity.GetId());
+        }
+    }
 
+    void removeAll(entity_t entity_id) {
+        std::apply([entity_id](SparseSet<component_types>&... pools) {
+            ((pools.contains(entity_id) && (pools.remove(entity_id), true)), ...);
+        }, storage_);
+    }
+};
 }  // namespace engine

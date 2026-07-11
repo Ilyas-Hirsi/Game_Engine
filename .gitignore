@@ -1,9 +1,12 @@
 # Out-of-source build (CMake preset uses build/)
 /build/
+# Throwaway Ninja dir used only to generate compile_commands.json for clangd
+# (the Visual Studio generator can't produce one).
+/build-cdb/
 /out/
 /bin/
 /obj/
-
+/docs/ROADMAP.md
 # Accidental in-source CMake configure at repo root
 /CMakeFiles/
 /CMakeCache.txt

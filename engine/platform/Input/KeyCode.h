@@ -5,6 +5,8 @@ enum class KeyCode {
     A,
     S,
     D,
+    Q,
+    E,
     Escape,
     Up,
     Down,

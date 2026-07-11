@@ -18,7 +18,6 @@ target_link_libraries(EnginePlatform PUBLIC
 add_library(EngineCore STATIC
   core/Log.cpp
   core/Timer.cpp
-  Scene/Entity.cpp
   Scene/Scene.cpp
   Scene/Systems/Systems.cpp
 )

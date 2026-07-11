@@ -7,18 +7,18 @@ namespace engine::MeshFactory {
     // All primitives use the layout: position(3) + color(3), stride 6 floats.
     // Sizes are unit (centered on the origin); scale via the entity transform.
 
-    inline MeshData Cube() {
+    inline MeshData Cube(float size = 1.0f) {
         MeshData mesh;
         mesh.layout = {{0, 3}, {1, 3}};
         mesh.vertices = {
-            -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
-             0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-             0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f,
-            -0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
-            -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 1.0f,
-             0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
-             0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 1.0f,
-            -0.5f,  0.5f,  0.5f, 0.2f, 0.2f, 0.2f,
+            -size/2.0f, -size/2.0f, -size/2.0f, 1.0f, 0.0f, 0.0f,
+            size/2.0f, -size/2.0f, -size/2.0f, 0.0f, 1.0f, 0.0f,
+            size/2.0f,  size/2.0f, -size/2.0f, 0.0f, 0.0f, 1.0f,
+            -size/2.0f,  size/2.0f, -size/2.0f, 1.0f, 1.0f, 0.0f,
+            -size/2.0f, -size/2.0f,  size/2.0f, 1.0f, 0.0f, 1.0f,
+            size/2.0f, -size/2.0f,  size/2.0f, 0.0f, 1.0f, 1.0f,
+            size/2.0f,  size/2.0f,  size/2.0f, 1.0f, 1.0f, 1.0f,
+            -size/2.0f,  size/2.0f,  size/2.0f, 0.2f, 0.2f, 0.2f,
         };
         mesh.indices = {
             0, 1, 2, 2, 3, 0,  // back
@@ -65,12 +65,11 @@ namespace engine::MeshFactory {
 
     // UV sphere of unit diameter (radius 0.5). `segments` controls both the
     // number of stacks and sectors, so higher = smoother (and more vertices).
-    inline MeshData Sphere(int segments = 32) {
+    inline MeshData Sphere(int segments = 32, float radius = 0.5f) {
         MeshData mesh;
         mesh.layout = {{0, 3}, {1, 3}};
 
         const float pi = 3.14159265358979323846f;
-        const float radius = 0.5f;
         const int stacks = segments;
         const int sectors = segments;
 
