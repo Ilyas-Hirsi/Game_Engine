@@ -35,6 +35,7 @@ int Application::Run() {
 
 void Application::OnUpdate(float delta_time) {
     system_.HandleInput(scene_,input_, delta_time);
+    scene_.Update(delta_time);
 }
 
 Renderer& Application::GetRenderer() { return renderer_; }

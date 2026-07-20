@@ -2,6 +2,8 @@
 #include "Window.h"
 #include "Renderer.h"
 #include "../core/Timer.h"
+#include "../Scene/Scene.h"
+#include "../Scene/Systems/Systems.h"
 #include <string>
 namespace engine {
 
@@ -31,6 +33,9 @@ namespace engine {
         Window window_;
         Renderer renderer_;
         Timer timer_;
+        Input input_;
+        System system_;
+        Scene scene_;
         // add input later
 
     };

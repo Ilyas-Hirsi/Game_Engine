@@ -25,17 +25,20 @@ void main() {
 }
 )";
 constexpr char kVertexShaderSourceDepth[] = R"(
-#version 330 core
-layout (location = 0) in vec3 a_position;
-layout (location = 1) in vec3 a_color;
-layout (location = 2) in mat4 a_model;   // per-instance, consumes locations 2,3,4,5
-out vec3 v_color;
-uniform mat4 u_viewProj;
-void main() {
-  v_color = a_color;
-  gl_Position = u_viewProj * a_model * vec4(a_position, 1.0);
-}
-)";
+  #version 330 core
+  layout (location = 0) in vec3 a_position;
+  layout (location = 1) in vec3 a_color;
+  layout (location = 2) in mat4 a_model;   // per-instance, consumes locations 2,3,4,5
+  layout (location = 6) in vec2 a_tex_coord;
+  out vec3 v_color;
+  out vec2 v_uv;
+  uniform mat4 u_viewProj;
+  void main() {
+    v_color = a_color;
+    v_uv = a_tex_coord;
+    gl_Position = u_viewProj * a_model * vec4(a_position, 1.0);
+  }
+  )";
 
 constexpr char kFragmentShaderSource[] = R"(
 #version 330 core
@@ -51,13 +54,20 @@ void main() {
 )";
 
 constexpr char kFragmentShaderSourceDepth[] = R"(
-#version 330 core
-in vec3 v_color;
-out vec4 fragment_color;
-void main() {
-  fragment_color = vec4(v_color, 1.0);
-}
-)";
+  #version 330 core
+  in vec3 v_color;
+  in vec2 v_uv;
+  out vec4 fragment_color;
+  uniform sampler2D u_texture;
+  uniform int u_useTexture;
+  void main() {
+    if (u_useTexture != 0) {
+      fragment_color = texture(u_texture, v_uv) * vec4(v_color, 1.0);
+    } else {
+      fragment_color = vec4(v_color, 1.0);
+    }
+  }
+  )";
 GLuint CompileShader(GLenum type, const char* source) {
   const GLuint shader = glCreateShader(type);
   glShaderSource(shader, 1, &source, nullptr);
@@ -442,21 +452,30 @@ void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture,const glm::mat4& 
   meshes_.emplace_back(mesh);
   return MeshHandle{static_cast<std::uint32_t>(meshes_.size())};
   }
+
   void Renderer::DrawMeshInstanced(MeshHandle mesh, TextureHandle texture, const std::vector<glm::mat4>& models){
-  if (models.empty() || mesh.id > meshes_.size() ) return;
-  const Mesh& m = meshes_[mesh.id - 1];
-  glUseProgram(mesh_shader_program_);
+    if (models.empty() || mesh.id > meshes_.size()) return;
+    const Mesh& m = meshes_[mesh.id - 1];
+    glUseProgram(mesh_shader_program_);
     const glm::mat4 view_proj = projection_matrix_ * view_matrix_;
     glUniformMatrix4fv(u_viewproj_loc_, 1, GL_FALSE, glm::value_ptr(view_proj));
-
+  
+    const bool use_texture = texture.IsValid() && texture.id <= textures_.size();
+    glUniform1i(glGetUniformLocation(mesh_shader_program_, "u_useTexture"),
+                use_texture ? 1 : 0);
+    if (use_texture) {
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, textures_[texture.id - 1]);
+      glUniform1i(glGetUniformLocation(mesh_shader_program_, "u_texture"), 0);
+    }
+  
     glBindBuffer(GL_ARRAY_BUFFER, instance_vbo_);
     glBufferData(GL_ARRAY_BUFFER, models.size() * sizeof(glm::mat4),
                  models.data(), GL_DYNAMIC_DRAW);
-
-                 glBindVertexArray(m.vao);
-                 glDrawElementsInstanced(GL_TRIANGLES, m.index_count,
-                                         GL_UNSIGNED_INT, nullptr,
-                                         static_cast<GLsizei>(models.size()));
-                 glBindVertexArray(0);
+    glBindVertexArray(m.vao);
+    glDrawElementsInstanced(GL_TRIANGLES, m.index_count,
+                            GL_UNSIGNED_INT, nullptr,
+                            static_cast<GLsizei>(models.size()));
+    glBindVertexArray(0);
   }
 }  // namespace engine

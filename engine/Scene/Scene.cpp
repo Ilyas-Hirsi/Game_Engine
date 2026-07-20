@@ -33,10 +33,6 @@ namespace engine {
         OnUpdate(deltaTime);
     }
     void Scene::FixedUpdate(float fixed_dt) {
-        view<TransformComponent, RigidBodyComponent>().each(
-            [](uint32_t, TransformComponent& t, RigidBodyComponent& rb) {
-                rb.previous_position = t.position;
-            });
         system_.FixedUpdate(*this, fixed_dt);
         system_.Collision(*this, fixed_dt);
     }

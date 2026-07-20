@@ -7,29 +7,33 @@ namespace engine::MeshFactory {
     // All primitives use the layout: position(3) + color(3), stride 6 floats.
     // Sizes are unit (centered on the origin); scale via the entity transform.
 
-    inline MeshData Cube(float size = 1.0f) {
-        MeshData mesh;
-        mesh.layout = {{0, 3}, {1, 3}};
-        mesh.vertices = {
-            -size/2.0f, -size/2.0f, -size/2.0f, 1.0f, 0.0f, 0.0f,
-            size/2.0f, -size/2.0f, -size/2.0f, 0.0f, 1.0f, 0.0f,
-            size/2.0f,  size/2.0f, -size/2.0f, 0.0f, 0.0f, 1.0f,
-            -size/2.0f,  size/2.0f, -size/2.0f, 1.0f, 1.0f, 0.0f,
-            -size/2.0f, -size/2.0f,  size/2.0f, 1.0f, 0.0f, 1.0f,
-            size/2.0f, -size/2.0f,  size/2.0f, 0.0f, 1.0f, 1.0f,
-            size/2.0f,  size/2.0f,  size/2.0f, 1.0f, 1.0f, 1.0f,
-            -size/2.0f,  size/2.0f,  size/2.0f, 0.2f, 0.2f, 0.2f,
-        };
-        mesh.indices = {
-            0, 1, 2, 2, 3, 0,  // back
-            4, 5, 6, 6, 7, 4,  // front
-            0, 4, 7, 7, 3, 0,  // left
-            1, 5, 6, 6, 2, 1,  // right
-            3, 2, 6, 6, 7, 3,  // top
-            0, 1, 5, 5, 4, 0,  // bottom
-        };
-        return mesh;
-    }
+// position(3) + color(3) + uv(2), stride 8. 24 verts so each face gets
+// its own UVs (a shared 8-vert cube can't map a texture cleanly).
+inline MeshData Cube(float size = 1.0f) {
+    const float h = size / 2.0f;
+    MeshData mesh;
+    mesh.layout = {{0, 3}, {1, 3}, {6, 2}};  // uv at location 6
+    mesh.vertices = {
+        // front (+z)
+        -h,-h, h, 1,1,1, 0,0,   h,-h, h, 1,1,1, 1,0,   h, h, h, 1,1,1, 1,1,  -h, h, h, 1,1,1, 0,1,
+        // back (-z)
+         h,-h,-h, 1,1,1, 0,0,  -h,-h,-h, 1,1,1, 1,0,  -h, h,-h, 1,1,1, 1,1,   h, h,-h, 1,1,1, 0,1,
+        // left (-x)
+        -h,-h,-h, 1,1,1, 0,0,  -h,-h, h, 1,1,1, 1,0,  -h, h, h, 1,1,1, 1,1,  -h, h,-h, 1,1,1, 0,1,
+        // right (+x)
+         h,-h, h, 1,1,1, 0,0,   h,-h,-h, 1,1,1, 1,0,   h, h,-h, 1,1,1, 1,1,   h, h, h, 1,1,1, 0,1,
+        // top (+y)
+        -h, h, h, 1,1,1, 0,0,   h, h, h, 1,1,1, 1,0,   h, h,-h, 1,1,1, 1,1,  -h, h,-h, 1,1,1, 0,1,
+        // bottom (-y)
+        -h,-h,-h, 1,1,1, 0,0,   h,-h,-h, 1,1,1, 1,0,   h,-h, h, 1,1,1, 1,1,  -h,-h, h, 1,1,1, 0,1,
+    };
+    mesh.indices = {
+        0,1,2, 2,3,0,        4,5,6, 6,7,4,
+        8,9,10, 10,11,8,     12,13,14, 14,15,12,
+        16,17,18, 18,19,16,  20,21,22, 22,23,20,
+    };
+    return mesh;
+}
 
     // Horizontal ground plane on the XZ axis (y = 0), facing up.
     inline MeshData Plane() {
@@ -67,34 +71,37 @@ namespace engine::MeshFactory {
     // number of stacks and sectors, so higher = smoother (and more vertices).
     inline MeshData Sphere(int segments = 32, float radius = 0.5f) {
         MeshData mesh;
-        mesh.layout = {{0, 3}, {1, 3}};
-
+        mesh.layout = {{0, 3}, {1, 3}, {6, 2}};  // pos, color, uv (uv at location 6)
+    
         const float pi = 3.14159265358979323846f;
         const int stacks = segments;
         const int sectors = segments;
-
+    
         for (int i = 0; i <= stacks; ++i) {
             const float stack_angle = pi / 2.0f - static_cast<float>(i) / stacks * pi;
             const float xy = std::cos(stack_angle) * radius;
             const float z = std::sin(stack_angle) * radius;
-
+    
             for (int j = 0; j <= sectors; ++j) {
                 const float sector_angle =
                     static_cast<float>(j) / sectors * 2.0f * pi;
                 const float x = xy * std::cos(sector_angle);
                 const float y = xy * std::sin(sector_angle);
-
+    
                 mesh.vertices.push_back(x);
                 mesh.vertices.push_back(y);
                 mesh.vertices.push_back(z);
-
-                // Color from the surface normal mapped to [0, 1] for visibility.
-                mesh.vertices.push_back(x / radius * 0.5f + 0.5f);
-                mesh.vertices.push_back(y / radius * 0.5f + 0.5f);
-                mesh.vertices.push_back(z / radius * 0.5f + 0.5f);
+    
+                // White so the texture shows unmodified (texture * color).
+                mesh.vertices.push_back(1.0f);
+                mesh.vertices.push_back(1.0f);
+                mesh.vertices.push_back(1.0f);
+    
+                // UV: wrap horizontally by sector, top-to-bottom by stack.
+                mesh.vertices.push_back(static_cast<float>(j) / sectors);
+                mesh.vertices.push_back(static_cast<float>(i) / stacks);
             }
         }
-
         for (int i = 0; i < stacks; ++i) {
             int k1 = i * (sectors + 1);
             int k2 = k1 + sectors + 1;
@@ -112,6 +119,71 @@ namespace engine::MeshFactory {
             }
         }
 
+        return mesh;
+    }
+    // Capsule with its long axis on Y. `height` is the cylinder section only,
+    // so total height = height + 2 * radius. Sizes are baked in here: scaling
+    // a capsule non-uniformly via the transform breaks the shape (and any
+    // future capsule collider), so keep entity scale at 1.
+    inline MeshData Capsule(int segments = 32, float radius = 0.5f, float height = 1.0f) {
+        MeshData mesh;
+        mesh.layout = {{0, 3}, {1, 3}, {6, 2}};  // pos, color, uv (uv at location 6)
+
+        const float pi = 3.14159265358979323846f;
+        const int stacks = segments + (segments & 1);  // even, so the equator lands on a ring
+        const int sectors = segments;
+        const int half = stacks / 2;
+        const float half_height = height / 2.0f;
+
+        // Profile arc length from the top pole, so the texture doesn't
+        // stretch across the wall: cap arc + wall + cap arc.
+        const float cap_arc = 0.5f * pi * radius;
+        const float total_arc = 2.0f * cap_arc + height;
+
+        for (int i = 0; i <= stacks + 1; ++i) {
+            const bool top = i <= half;
+            const int ring = top ? i : i - 1;  // the equator ring is emitted twice
+            const float stack_angle = pi / 2.0f - static_cast<float>(ring) / stacks * pi;
+            const float ring_radius = std::cos(stack_angle) * radius;
+            const float y = std::sin(stack_angle) * radius + (top ? half_height : -half_height);
+            const float arc = top ? (pi / 2.0f - stack_angle) * radius
+                                  : cap_arc + height - stack_angle * radius;
+
+            for (int j = 0; j <= sectors; ++j) {
+                const float sector_angle = static_cast<float>(j) / sectors * 2.0f * pi;
+                const float x = ring_radius * std::sin(sector_angle);
+                const float z = ring_radius * std::cos(sector_angle);
+
+                mesh.vertices.push_back(x);
+                mesh.vertices.push_back(y);
+                mesh.vertices.push_back(z);
+
+                mesh.vertices.push_back(1.0f);
+                mesh.vertices.push_back(1.0f);
+                mesh.vertices.push_back(1.0f);
+
+                mesh.vertices.push_back(static_cast<float>(j) / sectors);
+                mesh.vertices.push_back(arc / total_arc);
+            }
+        }
+
+        const int rows = stacks + 1;  // one more band of quads than the sphere
+        for (int i = 0; i < rows; ++i) {
+            int k1 = i * (sectors + 1);
+            int k2 = k1 + sectors + 1;
+            for (int j = 0; j < sectors; ++j, ++k1, ++k2) {
+                if (i != 0) {
+                    mesh.indices.push_back(k1);
+                    mesh.indices.push_back(k2);
+                    mesh.indices.push_back(k1 + 1);
+                }
+                if (i != rows - 1) {
+                    mesh.indices.push_back(k1 + 1);
+                    mesh.indices.push_back(k2);
+                    mesh.indices.push_back(k2 + 1);
+                }
+            }
+        }
         return mesh;
     }
 

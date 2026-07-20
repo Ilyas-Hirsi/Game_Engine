@@ -20,16 +20,18 @@ void System::HandleInput(Scene& scene, Input& input, float delta_time) {
 
   scene.view<InputComponent, TransformComponent, MovementComponent>().each(
       [&](uint32_t, InputComponent& keys, TransformComponent& transform, MovementComponent& move) {
-    const float turn_speed = 90.0f;
-    if (input.IsKeyDown(keys.rotate_left))  transform.rotation.y += turn_speed * delta_time;
-    if (input.IsKeyDown(keys.rotate_right)) transform.rotation.y -= turn_speed * delta_time;
-    if (input.IsKeyDown(keys.rotate_up)) transform.rotation.x += turn_speed * delta_time;
-    if (input.IsKeyDown(keys.rotate_down)) transform.rotation.x -= turn_speed * delta_time;
-    if (input.IsKeyDown(keys.camera_up)) transform.position.y += move.speed * delta_time;
-    if (input.IsKeyDown(keys.camera_down)) transform.position.y -= move.speed * delta_time;
-    const float yaw = glm::radians(transform.rotation.y);
-    const float pitch = glm::radians(transform.rotation.x);
-    move.facing = glm::vec3(std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch));
+        const float turn_speed = glm::radians(90.0f);
+        if (input.IsKeyDown(keys.rotate_left))  move.yaw += turn_speed * delta_time;
+        if (input.IsKeyDown(keys.rotate_right)) move.yaw -= turn_speed * delta_time;
+        if (input.IsKeyDown(keys.rotate_up))    move.pitch += turn_speed * delta_time;
+        if (input.IsKeyDown(keys.rotate_down))  move.pitch -= turn_speed * delta_time;
+        if (input.IsKeyDown(keys.camera_up))   transform.position.y += move.speed * delta_time;
+        if (input.IsKeyDown(keys.camera_down)) transform.position.y -= move.speed * delta_time;
+        move.pitch = glm::clamp(move.pitch, glm::radians(-89.0f), glm::radians(89.0f));
+        transform.rotation_quat =
+            glm::angleAxis(move.yaw, glm::vec3(0.0f, 1.0f, 0.0f)) *
+            glm::angleAxis(move.pitch, glm::vec3(1.0f, 0.0f, 0.0f));
+        move.facing = transform.rotation_quat * glm::vec3(0.0f, 0.0f, -1.0f);
     glm::vec3 local(0.0f);
     if (input.IsKeyDown(keys.up)) {
       local.z += 1.0f;
@@ -68,9 +70,15 @@ void System::FixedUpdate(Scene& scene, float fixed_dt) {
     auto& physics_settings = scene.GetPhysicsSettings();
     scene.view<TransformComponent, RigidBodyComponent>().each(
         [&](uint32_t, TransformComponent& t, RigidBodyComponent& rb) {
+            rb.previous_position = t.position;
+            rb.previous_rotation_quat = t.rotation_quat;
             if (rb.inverse_mass == 0.0f) return;
             rb.linear_velocity += physics_settings.gravity * rb.gravity_scale * fixed_dt;
             t.position += rb.linear_velocity * fixed_dt;
+            rb.angular_velocity += rb.angular_acceleration * fixed_dt;
+            glm::quat omega_quat(0.0f, rb.angular_velocity.x, rb.angular_velocity.y, rb.angular_velocity.z);
+            t.rotation_quat += (0.5f * fixed_dt) * (omega_quat * t.rotation_quat);
+            t.rotation_quat = glm::normalize(t.rotation_quat);
         });
 }
 
@@ -97,7 +105,8 @@ void System::Collision(Scene& scene, float) {
         rebuild = true;
         break;
       }
-      entry.aabb = ComputeAABB(transforms.get(entry.entity).position,
+      TransformComponent& t = transforms.get(entry.entity);
+      entry.aabb = ComputeAABB(t.position, t.rotation_quat,
                                colliders.get(entry.entity));
     }
   }
@@ -117,19 +126,44 @@ void System::Collision(Scene& scene, float) {
     const float total = wa + wb;
     if (total == 0.0f) return;  // two statics: nothing to do
 
-    transforms.get(ea).position -= c.normal * c.penetration * (wa / total);
-    transforms.get(eb).position += c.normal * c.penetration * (wb / total);
+    TransformComponent& ta = transforms.get(ea);
+    TransformComponent& tb = transforms.get(eb);
 
-    const glm::vec3 va = ra ? ra->linear_velocity : glm::vec3(0.0f);
-    const glm::vec3 vb = rb ? rb->linear_velocity : glm::vec3(0.0f);
+    const glm::vec3 lever_a = c.point - ta.position;
+    const glm::vec3 lever_b = c.point - tb.position;
+
+    ta.position -= c.normal * c.penetration * (wa / total);
+    tb.position += c.normal * c.penetration * (wb / total);
+
+    auto apply_inv_inertia = [](const RigidBodyComponent* body, const glm::quat& q,
+          const glm::vec3& v) {
+      return q * (body->inverse_inertia * (glm::conjugate(q) * v));
+      };
+    
+      const glm::vec3 va = ra ? ra->linear_velocity + glm::cross(ra->angular_velocity, lever_a)
+          : glm::vec3(0.0f);
+      const glm::vec3 vb = rb ? rb->linear_velocity + glm::cross(rb->angular_velocity, lever_b) 
+          : glm::vec3(0.0f);
     const float vn = glm::dot(vb - va, c.normal);
-    if (vn < 0.0f) {
+    if (vn >= 0.0f) return;
+      float denom = total;
+    if (ra) denom += glm::dot(c.normal, glm::cross(
+        apply_inv_inertia(ra, ta.rotation_quat, glm::cross(lever_a, c.normal)), lever_a));
+    if (rb) denom += glm::dot(c.normal, glm::cross(
+        apply_inv_inertia(rb, tb.rotation_quat, glm::cross(lever_b, c.normal)), lever_b));
+        
       const float ra_rest = ra ? ra->restitution : default_restitution;
       const float rb_rest = rb ? rb->restitution : default_restitution;
       const float jimp = -(1.0f + 0.5f * (ra_rest + rb_rest)) * vn / total;
-      if (ra) ra->linear_velocity -= c.normal * (jimp * wa);
-      if (rb) rb->linear_velocity += c.normal * (jimp * wb);
-    }
+      const glm::vec3 impulse = c.normal * jimp;
+      if (ra) {
+        ra->linear_velocity  -= impulse * wa;
+        ra->angular_velocity -= apply_inv_inertia(ra, ta.rotation_quat, glm::cross(lever_a, impulse));
+      }
+      if (rb) {
+        rb->linear_velocity  += impulse * wb;
+        rb->angular_velocity += apply_inv_inertia(rb, tb.rotation_quat, glm::cross(lever_b, impulse));
+      }
   };
 
   // sweep the sweep entries
@@ -140,9 +174,10 @@ void System::Collision(Scene& scene, float) {
       if (b.aabb.min.x > a.aabb.max.x) break;
       if (a.aabb.min.y > b.aabb.max.y || a.aabb.max.y < b.aabb.min.y) continue;
       if (a.aabb.min.z > b.aabb.max.z || a.aabb.max.z < b.aabb.min.z) continue;
-
-      const Contact c = Collide(transforms.get(a.entity).position, colliders.get(a.entity),
-                                transforms.get(b.entity).position, colliders.get(b.entity));
+      TransformComponent& ta = transforms.get(a.entity);
+      TransformComponent& tb = transforms.get(b.entity);
+      const Contact c = Collide(ta.position, ta.rotation_quat, colliders.get(a.entity),
+                                tb.position, tb.rotation_quat, colliders.get(b.entity));
       if (c.hit) resolve(a.entity, b.entity, c);
     }
   }
@@ -151,13 +186,15 @@ void System::Collision(Scene& scene, float) {
   for (entity_t plane_entity : dense) {
     ColliderComponent& plane_collider = colliders.get(plane_entity);
     if (!std::holds_alternative<Plane>(plane_collider.shape)) continue;
-    const glm::vec3 plane_pos = transforms.contains(plane_entity)
-        ? transforms.get(plane_entity).position : glm::vec3(0.0f);
+    TransformComponent* tp = transforms.try_get(plane_entity);
+    const glm::vec3 plane_pos = tp ? tp->position : glm::vec3(0.0f);
+    const glm::quat plane_rot_quat = tp ? tp->rotation_quat : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
     for (const SweepEntry& entry : sweep_entries_) {
-      const Contact c = Collide(transforms.get(entry.entity).position,
+      TransformComponent* te = transforms.try_get(entry.entity);
+      const Contact c = Collide(te->position, te->rotation_quat,
                                 colliders.get(entry.entity),
-                                plane_pos, plane_collider);
+                                plane_pos, plane_rot_quat, plane_collider);
       if (c.hit) resolve(entry.entity, plane_entity, c);
     }
   }
@@ -203,12 +240,10 @@ void System::Render(Scene& scene, Renderer& renderer, float alpha) {
           const glm::vec3 position = rb
             ? glm::mix(rb->previous_position, transform.position, alpha)
             : transform.position;
-        
+          
           glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
-          model = glm::rotate(model, glm::radians(transform.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-          model = glm::rotate(model, glm::radians(transform.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-          model = glm::rotate(model, glm::radians(transform.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-          model = glm::scale(model, transform.scale);
+          model *= glm::mat4_cast(transform.rotation_quat);
+          model  = glm::scale(model, transform.scale);
   
           std::uint32_t tex = texture_pool.contains(entity)
               ? texture_pool.get(entity).texture.id : 0;
@@ -238,8 +273,9 @@ void System::BuildAABBs(Scene& scene) {
     if (!transforms.contains(entity)) continue;
     const ColliderComponent& collider = colliders.get(entity);
     if (std::holds_alternative<Plane>(collider.shape)) continue;  // planes get their own pass
+    TransformComponent& t = transforms.get(entity);
     sweep_entries_.push_back(
-        {entity, ComputeAABB(transforms.get(entity).position, collider)});
+        {entity, ComputeAABB(t.position, t.rotation_quat, collider)});
   }
 
   std::sort(sweep_entries_.begin(), sweep_entries_.end(),
