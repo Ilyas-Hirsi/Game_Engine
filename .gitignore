@@ -6,7 +6,6 @@
 /out/
 /bin/
 /obj/
-/docs/ROADMAP.md
 # Accidental in-source CMake configure at repo root
 /CMakeFiles/
 /CMakeCache.txt
