@@ -54,9 +54,8 @@ class EventBus {
     std::vector<T> queue;
 
     void Flush() override {
-      // Drain into a local copy first so a handler that publishes the same
-      // event type does not grow the container we are iterating; those new
-      // events are delivered on the following Dispatch() instead.
+      // Drain into a local copy so a handler publishing the same event type
+      // doesn't grow the container we're iterating; those land next Dispatch().
       std::vector<T> pending;
       pending.swap(queue);
       for (const T& event : pending) {
@@ -70,8 +69,7 @@ class EventBus {
   };
 
   // Returns the channel for T, creating it on first use. The type_index key
-  // guarantees the stored channel is exactly a TypedChannel<T>, so the cast
-  // back from the type-erased IChannel is safe.
+  // makes the cast back from the type-erased IChannel safe.
   template <typename T>
   TypedChannel<T>& Channel() {
     const std::type_index key(typeid(T));

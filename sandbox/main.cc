@@ -17,20 +17,72 @@
 #include <vector>
 
 
+// A character is one rigid body of primitive children: a sphere head, capsule
+// torso, capsule arms (T-pose) and legs. One table drives both the render mesh
+// and the collider, so visuals and physics can't drift apart. Sizes are world
+// units; entities keep scale = 1 (see the MeshFactory capsule note).
+struct BodyPart {
+  bool is_sphere;
+  float radius;
+  float height;  // capsule cylinder section; ignored for spheres
+  glm::vec3 offset;
+  glm::quat rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+};
+
+static const glm::quat kArmRot =
+    glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+static const BodyPart kCharacterParts[] = {
+    {true,  0.8f, 0.0f, { 0.0f,  2.6f, 0.0f}},           // head
+    {false, 1.0f, 2.0f, { 0.0f,  0.0f, 0.0f}},           // torso
+    {false, 0.4f, 1.6f, {-1.7f,  0.6f, 0.0f}, kArmRot},  // left arm
+    {false, 0.4f, 1.6f, { 1.7f,  0.6f, 0.0f}, kArmRot},  // right arm
+    {false, 0.5f, 1.6f, {-0.55f, -2.5f, 0.0f}},          // left leg
+    {false, 0.5f, 1.6f, { 0.55f, -2.5f, 0.0f}}           // right leg
+};
+
+static engine::MeshData BuildCharacterMesh() {
+  engine::MeshData mesh;
+  for (const BodyPart& part : kCharacterParts) {
+    const engine::MeshData prim = part.is_sphere
+        ? engine::MeshFactory::Sphere(16, part.radius)
+        : engine::MeshFactory::Capsule(16, part.radius, part.height);
+    engine::MeshFactory::Append(mesh, prim, part.offset, part.rotation);
+  }
+  return mesh;
+}
+
+static engine::ColliderComponent BuildCharacterCollider() {
+  engine::ColliderComponent collider;
+  for (const BodyPart& part : kCharacterParts) {
+    engine::ChildShape child;
+    if (part.is_sphere) {
+      child.shape = engine::Sphere{part.radius};
+    } else {
+      child.shape = engine::Capsule{part.radius, part.height};
+    }
+    child.local_position = part.offset;
+    child.local_rotation = part.rotation;
+    collider.child_shapes.push_back(child);
+  }
+  return collider;
+}
+
 int main(int argc, char* argv[]) {
   (void)argc;
   (void)argv;
 
   // Arena is a +/-kHalf box. The floor sits at y = -kHalf; four invisible
   // wall planes face inward so nothing escapes sideways.
-  const float kHalf        = 100.0f;
-  const float kSphereScale = 4.0f;                 // mesh radius 0.5 -> visual 2.0
-  const float kRadius      = 0.5f * kSphereScale;  // collider radius matches
-  const int   kSphereCount = 1500;
+  const float kHalf       = 100.0f;
+  const float kBodyExtent = 4.0f;  // spawn margin: roughly a character's reach
+  // Each character is 6 primitives, so entity-pair narrow phase is ~36 child
+  // tests; fewer, larger bodies than the old sphere demo keeps the cost sane.
+  const int   kBodyCount  = 500;
 
-  // Lifetime churn: every sphere lives a few seconds, then is destroyed and
-  // replaced by a fresh one dropped from the spawner, so the population stays
-  // at kSphereCount while entity IDs are continuously destroyed and recycled.
+  // Lifetime churn: each character lives a few seconds, then is destroyed and
+  // respawned from the spawner, holding the population at kBodyCount while
+  // entity IDs are recycled.
   const float kLifetimeMin      = 4.0f;
   const float kLifetimeMax      = 10.0f;
   const float kSpawnHeight      = 80.0f;
@@ -83,7 +135,7 @@ int main(int argc, char* argv[]) {
   scene.emplace<engine::MeshComponent>(floor, floor_mesh);
 
   engine::ColliderComponent floor_collider{};
-  floor_collider.shape = engine::Plane{glm::vec3(0.0f, 1.0f, 0.0f), -kHalf};
+  floor_collider.child_shapes = {{engine::Plane{glm::vec3(0.0f, 1.0f, 0.0f), -kHalf}}};
   floor_collider.is_static = true;
   scene.emplace<engine::ColliderComponent>(floor, floor_collider);
 
@@ -92,7 +144,7 @@ int main(int argc, char* argv[]) {
     engine::Entity wall = scene.CreateEntity();
     scene.emplace<engine::TransformComponent>(wall, engine::TransformComponent{});
     engine::ColliderComponent collider{};
-    collider.shape = engine::Plane{normal, -kHalf};
+    collider.child_shapes = {{engine::Plane{normal, -kHalf}}};
     collider.is_static = true;
     scene.emplace<engine::ColliderComponent>(wall, collider);
   };
@@ -101,47 +153,37 @@ int main(int argc, char* argv[]) {
   add_wall(glm::vec3( 0.0f, 0.0f,  1.0f));  // back  (z >= -kHalf)
   add_wall(glm::vec3( 0.0f, 0.0f, -1.0f));  // front (z <=  kHalf)
 
-  // --- Falling bodies: a random mix of spheres and cubes --------------------
-  const engine::MeshHandle sphere_mesh =
-      renderer.CreateMesh(engine::MeshFactory::Sphere());
-  const engine::MeshHandle cube_mesh =
-      renderer.CreateMesh(engine::MeshFactory::Cube());
-  const engine::MeshHandle capsule_mesh =
-      renderer.CreateMesh(engine::MeshFactory::Capsule());
+  // --- Falling bodies: compound character ragdolls --------------------------
+  // One baked mesh shared by every character; the compound collider mirrors
+  // it part-for-part via kCharacterParts.
+  const engine::MeshHandle character_mesh =
+      renderer.CreateMesh(BuildCharacterMesh());
   const engine::TextureHandle crate_tex =
       renderer.LoadTexture("C:/Users/ilyas/Downloads/mauga.jpeg");  // path to test texture
 
   std::mt19937 rng(1337u);
-  std::uniform_real_distribution<float> spread(-kHalf + kRadius, kHalf - kRadius);
+  std::uniform_real_distribution<float> spread(-kHalf + kBodyExtent, kHalf - kBodyExtent);
   std::uniform_real_distribution<float> height(10.0f, 80.0f);
   std::uniform_real_distribution<float> lifetime_dist(kLifetimeMin, kLifetimeMax);
-  std::bernoulli_distribution coin(0.5);  // true = cube, false = sphere
 
   auto spawn_body = [&](const glm::vec3& position) -> engine::Entity {
-    const bool is_cube = coin(rng);
     engine::Entity body = scene.CreateEntity();
 
     engine::TransformComponent transform{};
     transform.position = position;
-    transform.scale = glm::vec3(kSphereScale);
+    // Character sizes are baked into the mesh and collider; scaling the
+    // transform would desync them (and break the capsules), so stay at 1.
+    transform.scale = glm::vec3(1.0f);
     scene.emplace<engine::TransformComponent>(body, transform);
 
     engine::MeshComponent mesh{};
-    mesh.mesh = is_cube ? capsule_mesh : sphere_mesh;
+    mesh.mesh = character_mesh;
     mesh.entity_id = body.GetId();
     scene.emplace<engine::MeshComponent>(body, mesh);
     scene.emplace<engine::TextureComponent>(
       body, engine::TextureComponent{crate_tex});
 
-    // Unit meshes scaled by kSphereScale: sphere radius and cube half extents
-    // both come out to kRadius, so the colliders match the visuals.
-    engine::ColliderComponent collider{};
-    if (is_cube) {
-      collider.shape = engine::Capsule{kRadius, 4.0f};
-    } else {
-      collider.shape = engine::Sphere{kRadius};
-    }
-    scene.emplace<engine::ColliderComponent>(body, collider);
+    scene.emplace<engine::ColliderComponent>(body, BuildCharacterCollider());
 
     engine::RigidBodyComponent rigid_body{};
     rigid_body.inverse_mass = 1.0f;
@@ -154,20 +196,20 @@ int main(int argc, char* argv[]) {
   };
 
   // Each body carries its handle + remaining lifetime; slots are reused on
-  // respawn so the vector never grows past kSphereCount.
+  // respawn so the vector never grows past kBodyCount.
   struct TimedBody {
     engine::Entity entity;
     float remaining;
   };
   std::vector<TimedBody> bodies;
-  bodies.reserve(kSphereCount);
-  for (int i = 0; i < kSphereCount; ++i) {
+  bodies.reserve(kBodyCount);
+  for (int i = 0; i < kBodyCount; ++i) {
     const glm::vec3 position(spread(rng), height(rng), spread(rng));
     bodies.push_back({spawn_body(position), lifetime_dist(rng)});
   }
 
   engine::LogInfo(
-      "Collision demo: spheres and cubes fall into a walled pen, expire after "
+      "Collision demo: compound character ragdolls fall into a walled pen, expire after "
       "a few seconds, and respawn from the orbiting spawner. WASD/arrows move "
       "the camera.");
 
@@ -187,9 +229,8 @@ int main(int argc, char* argv[]) {
     scene.HandleInput(input, frame_dt);
     scene.Update(frame_dt);
 
-    // Lifetime churn: expire spheres and respawn them at the spawner's
-    // current position. This runs outside any view iteration, so destroying
-    // here is safe (no deferred-destroy queue needed yet).
+    // Expire and respawn bodies at the spawner's position. Runs outside any
+    // view iteration, so destroying here is safe.
     spawner_angle += kSpawnerAngSpeed * frame_dt;
     const glm::vec3 spawn_pos(std::cos(spawner_angle) * kSpawnerRadius,
                               kSpawnHeight,

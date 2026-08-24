@@ -11,10 +11,9 @@ class Timer {
   float TotalTime() const { return total_time_; }
 
  private:
-  // Absolute timestamps are kept in double: the steady_clock epoch is a very
-  // large value (seconds since ~boot), and a 32-bit float's ~7 significant
-  // digits cannot resolve a frame-sized delta at that magnitude. delta_time_
-  // stays float because it is always small.
+  // Absolute timestamps use double: at the steady_clock epoch's magnitude a
+  // float's ~7 digits can't resolve a frame-sized delta. delta_time_ stays
+  // float since it's always small.
   double last_time_ = 0.0;
   float delta_time_ = 0.0f;
   double total_time_ = 0.0;

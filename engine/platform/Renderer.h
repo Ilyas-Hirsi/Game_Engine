@@ -39,11 +39,18 @@ class Renderer {
   void DrawSprite(TextureHandle texture, float x, float y, int width, int height);
   void DrawMesh(MeshHandle mesh, TextureHandle texture, const glm::mat4& model);
   void DrawMeshInstanced(MeshHandle mhes, TextureHandle texture, const std::vector<glm::mat4>& models);
+  void CalculateMeshBounds(const MeshData& mesh_data, Mesh& mesh);
+  void CalculateMeshBounds(const std::vector<float>& vertices, int stride, Mesh& mesh);
   MeshHandle CreateMesh(const MeshData& mesh_data);
+
+
+  bool GetMeshBounds(MeshHandle mesh, glm::vec3& out_min, glm::vec3& out_max) const;
 
   void SetCamera(const glm::mat4& view, const glm::mat4& projection);
   float GetAspectRatio() const;
-
+  const glm::mat4& GetViewMatrix() const;
+  const glm::mat4& GetProjectionMatrix() const;
+  glm::mat4 GetViewProjectionMatrix() const;
  private:
   SDL_GLContext gl_context_ = nullptr;
   bool image_initialized_ = false;
@@ -60,6 +67,9 @@ class Renderer {
   int viewport_width_ = 0;
   int viewport_height_ = 0;
   int u_viewproj_loc_ = -1;
+  int u_use_texture_loc_ = -1;
+  int u_sprite_texture_loc_ = -1;
+  int u_mesh_texture_loc_ = -1;
   std::uint8_t clear_r_ = 32;
   std::uint8_t clear_g_ = 32;
   std::uint8_t clear_b_ = 48;

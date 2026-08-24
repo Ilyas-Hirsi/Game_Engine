@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <type_traits>
@@ -10,29 +11,59 @@
 
 namespace engine {
 
-// Result of a narrow-phase test. `normal` points from A toward B and is unit
-// length when `hit` is true; `penetration` is how deep the two shapes overlap.
-// Resolution moves A along -normal and B along +normal.
+// Narrow-phase result. `normal` points A->B (unit when `hit`); `penetration`
+// is the overlap depth. Resolution moves A along -normal, B along +normal.
 struct Contact {
   bool      hit         = false;
   glm::vec3 normal      = glm::vec3(0.0f);
   float     penetration = 0.0f;
   glm::vec3 point = glm::vec3(0.0f);
 };
+
+
 struct AABB {
   glm::vec3 min;
   glm::vec3 max;
 };
+
 
 inline Contact Flip(Contact c) {
   c.normal = -c.normal;
   return c;
 }
 
+// Keeps the deepest contacts in a heap ordered by penetration depth.
+struct ContactManifold {
+  static constexpr int kMaxContacts = 8;
+  Contact contacts[kMaxContacts];
+  int     count = 0;
+
+  
+  static bool ShallowerAtRoot(const Contact& a, const Contact& b) {
+    return a.penetration > b.penetration;
+  }
+
+  void Add(const Contact& c) {
+    if (!c.hit) return;
+    if (count < kMaxContacts) {
+      contacts[count++] = c;
+      std::push_heap(contacts, contacts + count, ShallowerAtRoot);
+    } else if (c.penetration > contacts[0].penetration) {
+      std::pop_heap(contacts, contacts + kMaxContacts, ShallowerAtRoot);
+      contacts[kMaxContacts - 1] = c;
+      std::push_heap(contacts, contacts + kMaxContacts, ShallowerAtRoot);
+    }
+  }
+
+  void Clear() { count = 0; }
+
+  const Contact* begin() const { return contacts; }
+  const Contact* end()   const { return contacts + count; }
+};
+
 // --- Narrow phase ---------------------------------------------------------
-// World placement comes from the entity's TransformComponent.position, passed
-// in here as `ca` / `cb`. Planes are infinite half-spaces defined absolutely
-// by their normal + offset, so they ignore the transform position.
+// `ca` / `cb` are world positions from TransformComponent. Planes are infinite
+// half-spaces defined by normal + offset, so they ignore the transform.
 
 inline Contact SphereSphere(const glm::vec3& ca, const Sphere& a,
                             const glm::vec3& cb, const Sphere& b) {
@@ -233,78 +264,103 @@ inline Contact CapsuleBox(const glm::vec3& ca, const glm::quat& qa, const Capsul
   return SphereBox(world_point, Sphere{a.radius}, cb, qb, b);
 }
 
-inline Contact Collide(const glm::vec3& pa, const glm::quat& ra, const ColliderComponent& a,
-                       const glm::vec3& pb, const glm::quat& rb, const ColliderComponent& b) {
-  return std::visit(
-      [&](auto const& sa, auto const& sb) -> Contact {
-        using A = std::decay_t<decltype(sa)>;
-        using B = std::decay_t<decltype(sb)>;
-        if constexpr (std::is_same_v<A, Sphere> && std::is_same_v<B, Sphere>)
-          return SphereSphere(pa, sa, pb, sb);
-        else if constexpr (std::is_same_v<A, Sphere> && std::is_same_v<B, Plane>)
-          return SpherePlane(pa, sa, sb);
-        else if constexpr (std::is_same_v<A, Plane> && std::is_same_v<B, Sphere>)
-          return Flip(SpherePlane(pb, sb, sa));
-        else if constexpr (std::is_same_v<A, Sphere> && std::is_same_v<B, Box>)
-          return SphereBox(pa, sa, pb, rb, sb);
-        else if constexpr (std::is_same_v<A, Box> && std::is_same_v<B, Sphere>)
-          return Flip(SphereBox(pb, sb, pa, ra, sa));
-        else if constexpr (std::is_same_v<A, Box> && std::is_same_v<B, Plane>)
-          return BoxPlane(pa, ra, sa, sb);
-        else if constexpr (std::is_same_v<A, Plane> && std::is_same_v<B, Box>)
-          return Flip(BoxPlane(pb, rb, sb, sa));
-        else if constexpr (std::is_same_v<A, Box> && std::is_same_v<B, Box>)
-          return BoxBox(pa, ra, sa, pb, rb, sb);
-        else if constexpr (std::is_same_v<A, Capsule> && std::is_same_v<B, Sphere>)
-          return CapsuleSphere(pa, ra, sa, pb, sb);
-        else if constexpr (std::is_same_v<A, Sphere> && std::is_same_v<B, Capsule>)
-          return Flip(CapsuleSphere(pb, rb, sb, pa, sa));
-        else if constexpr (std::is_same_v<A, Capsule> && std::is_same_v<B, Plane>)
-          return CapsulePlane(pa, ra, sa, sb);
-        else if constexpr (std::is_same_v<A, Plane> && std::is_same_v<B, Capsule>)
-          return Flip(CapsulePlane(pb, rb, sb, sa));
-        else if constexpr (std::is_same_v<A, Capsule> && std::is_same_v<B, Box>)
-          return CapsuleBox(pa, ra, sa, pb, rb, sb);
-        else if constexpr (std::is_same_v<A, Box> && std::is_same_v<B, Capsule>)
-          return Flip(CapsuleBox(pb, rb, sb, pa, ra, sa));
-        else if constexpr (std::is_same_v<A, Capsule> && std::is_same_v<B, Capsule>)
-          return CapsuleCapsule(pa, ra, sa, pb, rb, sb);
-        else
-          return {};  // plane-plane collision ignored
-      },
-      a.shape, b.shape);
+inline void Collide(const glm::vec3& pa, const glm::quat& ra, const ColliderComponent& a,
+                       const glm::vec3& pb, const glm::quat& rb, const ColliderComponent& b,
+                       ContactManifold& out) {
+
+  for (const ChildShape& child_a : a.child_shapes) {
+    for (const ChildShape& child_b : b.child_shapes) {
+      glm::vec3 child_a_pos = pa + ra * child_a.local_position;
+      glm::quat child_a_rot = ra * child_a.local_rotation;
+      glm::vec3 child_b_pos = pb + rb * child_b.local_position;
+      glm::quat child_b_rot = rb * child_b.local_rotation;
+      std::visit(
+        [&](auto const& sa, auto const& sb) -> void {
+          using A = std::decay_t<decltype(sa)>;
+          using B = std::decay_t<decltype(sb)>;
+          if constexpr (std::is_same_v<A, Sphere> && std::is_same_v<B, Sphere>)
+            out.Add(SphereSphere(child_a_pos, sa, child_b_pos, sb));
+          else if constexpr (std::is_same_v<A, Sphere> && std::is_same_v<B, Plane>)
+            out.Add(SpherePlane(child_a_pos, sa, sb));
+          else if constexpr (std::is_same_v<A, Plane> && std::is_same_v<B, Sphere>)
+            out.Add(Flip(SpherePlane(child_b_pos, sb, sa)));
+          else if constexpr (std::is_same_v<A, Sphere> && std::is_same_v<B, Box>)
+            out.Add(SphereBox(child_a_pos, sa, child_b_pos, child_b_rot, sb));
+          else if constexpr (std::is_same_v<A, Box> && std::is_same_v<B, Sphere>)
+            out.Add(Flip(SphereBox(child_b_pos, sb, child_a_pos, child_a_rot, sa)));
+          else if constexpr (std::is_same_v<A, Box> && std::is_same_v<B, Plane>)
+            out.Add(BoxPlane(child_a_pos, child_a_rot, sa, sb));
+          else if constexpr (std::is_same_v<A, Plane> && std::is_same_v<B, Box>)
+            out.Add(Flip(BoxPlane(child_b_pos, child_b_rot, sb, sa)));
+          else if constexpr (std::is_same_v<A, Box> && std::is_same_v<B, Box>)
+            out.Add(BoxBox(child_a_pos, child_a_rot, sa, child_b_pos, child_b_rot, sb));
+          else if constexpr (std::is_same_v<A, Capsule> && std::is_same_v<B, Sphere>)
+            out.Add(CapsuleSphere(child_a_pos, child_a_rot, sa, child_b_pos, sb));
+          else if constexpr (std::is_same_v<A, Sphere> && std::is_same_v<B, Capsule>)
+            out.Add(Flip(CapsuleSphere(child_b_pos, child_b_rot, sb, child_a_pos, sa)));
+          else if constexpr (std::is_same_v<A, Capsule> && std::is_same_v<B, Plane>)
+            out.Add(CapsulePlane(child_a_pos, child_a_rot, sa, sb));
+          else if constexpr (std::is_same_v<A, Plane> && std::is_same_v<B, Capsule>)
+            out.Add(Flip(CapsulePlane(child_b_pos, child_b_rot, sb, sa)));
+          else if constexpr (std::is_same_v<A, Capsule> && std::is_same_v<B, Box>)
+            out.Add(CapsuleBox(child_a_pos, child_a_rot, sa, child_b_pos, child_b_rot, sb));
+          else if constexpr (std::is_same_v<A, Box> && std::is_same_v<B, Capsule>)
+            out.Add(Flip(CapsuleBox(child_b_pos, child_b_rot, sb, child_a_pos, child_a_rot, sa)));
+          else if constexpr (std::is_same_v<A, Capsule> && std::is_same_v<B, Capsule>)
+            out.Add(CapsuleCapsule(child_a_pos, child_a_rot, sa, child_b_pos, child_b_rot, sb));
+            // plane-plane collision ignored
+        },
+        child_a.shape, child_b.shape);
+
+    }
+
+  }
 }
 
 inline AABB ComputeAABB(const glm::vec3& pos, const glm::quat& rot, const ColliderComponent& col){
   AABB aabb;
   float infinity = std::numeric_limits<float>::infinity();
+  aabb.min = {infinity, infinity, infinity};
+  aabb.max = {-infinity, -infinity, -infinity};
+  for (const ChildShape& child : col.child_shapes) {
+    glm::vec3 child_pos = pos + rot * child.local_position;
+    glm::quat child_rot = rot * child.local_rotation;
 std::visit(
   [&](auto const& col) -> void {
     using T = std::decay_t<decltype(col)>;
     if constexpr (std::is_same_v<T, Sphere>) {
-      aabb.min = {pos.x - col.radius, pos.y - col.radius, pos.z - col.radius};
-      aabb.max = {pos.x + col.radius, pos.y + col.radius, pos.z + col.radius};
+      aabb.min = glm::min(aabb.min, child_pos - glm::vec3(col.radius));
+      aabb.max = glm::max(aabb.max, child_pos + glm::vec3(col.radius));
     } else if constexpr (std::is_same_v<T, Box>) {
-      const glm::mat3 r = glm::mat3_cast(rot);
+      const glm::mat3 r = glm::mat3_cast(child_rot);
       const glm::mat3 abs_r(glm::abs(r[0]), glm::abs(r[1]), glm::abs(r[2]));
       const glm::vec3 world_half = abs_r * col.half_extents;
-      aabb.min = pos - world_half;
-      aabb.max = pos + world_half;
+      aabb.min = glm::min(aabb.min, child_pos - world_half);
+      aabb.max = glm::max(aabb.max, child_pos + world_half);
     } else if constexpr (std::is_same_v<T, Plane>) {
-      // aabb box will fail on everything
-      aabb.min = {infinity, infinity, infinity};
-      aabb.max = {-infinity, -infinity, -infinity};
+      // Planes are infinite and handled in a separate pass, so they add
+      // nothing here; a plane-only collider keeps the inverted-infinity box.
     }
     else if constexpr (std::is_same_v<T, Capsule>) {
       const float half_height = col.height * 0.5f;
-      const glm::vec3 axis = rot * glm::vec3(0.0f, half_height, 0.0f);
+      const glm::vec3 axis = child_rot * glm::vec3(0.0f, half_height, 0.0f);
       const glm::vec3 world_half = glm::abs(axis) + glm::vec3(col.radius);
-      aabb.min = pos - world_half;
-      aabb.max = pos + world_half;
+      aabb.min = glm::min(aabb.min, child_pos - world_half);
+      aabb.max = glm::max(aabb.max, child_pos + world_half);
     }
   },
-  col.shape);
+  child.shape);
+
+  }
 return aabb;
+}
+
+// Planes are infinite half-spaces, so plane colliders are excluded from the
+// sweep and handled in their own pass (see System::Collision).
+inline bool HasPlane(const ColliderComponent& col) {
+  for (const ChildShape& child : col.child_shapes)
+    if (std::holds_alternative<Plane>(child.shape)) return true;
+  return false;
 }
 
 }  // namespace engine

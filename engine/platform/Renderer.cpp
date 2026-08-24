@@ -7,6 +7,8 @@
 #include <SDL_image.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
+#include <limits>
 
 namespace engine {
 
@@ -77,6 +79,7 @@ GLuint CompileShader(GLenum type, const char* source) {
   glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
   if (success == GL_FALSE) {
     glDeleteShader(shader);
+    std::cout << "Shader compilation failed" << std::endl;
     return 0;
   }
 
@@ -156,7 +159,18 @@ bool Renderer::Initialize(Window& window) {
     Shutdown();
     return false;
   }
+  // Uniform locations are fixed once a program links, so resolve them here
   u_viewproj_loc_ = glGetUniformLocation(mesh_shader_program_, "u_viewProj");
+  u_use_texture_loc_ = glGetUniformLocation(mesh_shader_program_, "u_useTexture");
+  u_mesh_texture_loc_ = glGetUniformLocation(mesh_shader_program_, "u_texture");
+  u_sprite_texture_loc_ = glGetUniformLocation(shader_program_, "u_texture");
+
+  glUseProgram(mesh_shader_program_);
+  glUniform1i(u_mesh_texture_loc_, 0);
+  glUseProgram(shader_program_);
+  glUniform1i(u_sprite_texture_loc_, 0);
+  glUseProgram(0);
+
   glGenBuffers(1, &instance_vbo_);
 
   glGenVertexArrays(1, &vertex_array_);
@@ -296,6 +310,28 @@ TextureHandle Renderer::LoadTexture(const std::string& texture_path) {
   texture_cache_[texture_path] = handle;
   return handle;
 }
+
+void Renderer::CalculateMeshBounds(const MeshData& mesh_data, Mesh& mesh){
+  CalculateMeshBounds(mesh_data.vertices, mesh_data.Stride(), mesh);
+}
+
+// Calculates the bounds of a mesh from its vertices
+void Renderer::CalculateMeshBounds(const std::vector<float>& vertices, int stride, Mesh& mesh){
+  glm::vec3 low(std::numeric_limits<float>::max());
+  glm::vec3 high(std::numeric_limits<float>::lowest());
+  for (std::size_t v = 0; v + 3 <= vertices.size(); v += stride) {
+    const glm::vec3 p(vertices[v], vertices[v+1], vertices[v+2]);
+    low = glm::min(low, p);
+    high = glm::max(high, p);
+  }
+  if (glm::any(glm::greaterThan(low, high))){
+    low = glm::vec3(0.0f);
+    high = glm::vec3(0.0f);
+  }
+  mesh.bounds_min = low;
+  mesh.bounds_max = high;
+}
+
 MeshHandle Renderer::CreateMesh(const std::vector<float>& vertices,
   const std::vector<unsigned int>& indices) {
 Mesh mesh;
@@ -317,6 +353,7 @@ glEnableVertexAttribArray(1);
 glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
     reinterpret_cast<void*>(3 * sizeof(float)));
 glBindVertexArray(0);
+CalculateMeshBounds(vertices, 6, mesh);  // pos(3) + color(3)
 meshes_.emplace_back(mesh);
 return MeshHandle{static_cast<std::uint32_t>(meshes_.size())};  // 1-based, like textures
 }
@@ -362,7 +399,6 @@ void Renderer::DrawSprite(TextureHandle texture, float x, float y, int width, in
   glUseProgram(shader_program_);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, textures_[texture.id - 1]);
-  glUniform1i(glGetUniformLocation(shader_program_, "u_texture"), 0);
 
   glBindVertexArray(vertex_array_);
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
@@ -384,28 +420,12 @@ float Renderer::GetAspectRatio() const {
          static_cast<float>(viewport_height_);
 }
 
-void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture,const glm::mat4& model){
-  (void)texture;  // add !texture.IsValid() || texture.id > textures_.size() when textures are ready to be used
-  if (gl_context_ == nullptr || mesh_shader_program_ == 0 ||
-      !mesh.IsValid() || mesh.id > meshes_.size() ||
-      viewport_width_ <= 0 || viewport_height_ <= 0) {
-    return;
-  }
-
-  const Mesh& mesh_data = meshes_[mesh.id - 1];
-  const glm::mat4 mvp = projection_matrix_ * view_matrix_ * model;
-
-  glUseProgram(mesh_shader_program_);
-  glUniformMatrix4fv(
-      glGetUniformLocation(mesh_shader_program_, "u_mvp"),
-      1,
-      GL_FALSE,
-      glm::value_ptr(mvp));
-
-  glBindVertexArray(mesh_data.vao);
-  glDrawElements(GL_TRIANGLES, mesh_data.index_count, GL_UNSIGNED_INT, nullptr);
-  glBindVertexArray(0);
- }
+// A single mesh draw is just an instanced draw with one instance: the shader
+// pulls the model matrix from the a_model instance attribute, not a uniform,
+// so route through the instanced path instead of duplicating that setup.
+void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture, const glm::mat4& model) {
+  DrawMeshInstanced(mesh, texture, {model});
+}
 
 
  MeshHandle Renderer::CreateMesh(const MeshData& mesh_data) {
@@ -447,26 +467,24 @@ void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture,const glm::mat4& 
                           reinterpret_cast<void*>(i * sizeof(glm::vec4)));
     glVertexAttribDivisor(2 + i, 1);
   }
-
+  CalculateMeshBounds(mesh_data, mesh);
   glBindVertexArray(0);
   meshes_.emplace_back(mesh);
   return MeshHandle{static_cast<std::uint32_t>(meshes_.size())};
   }
 
   void Renderer::DrawMeshInstanced(MeshHandle mesh, TextureHandle texture, const std::vector<glm::mat4>& models){
-    if (models.empty() || mesh.id > meshes_.size()) return;
+    if (models.empty() || !mesh.IsValid() || mesh.id > meshes_.size()) return;
     const Mesh& m = meshes_[mesh.id - 1];
     glUseProgram(mesh_shader_program_);
     const glm::mat4 view_proj = projection_matrix_ * view_matrix_;
     glUniformMatrix4fv(u_viewproj_loc_, 1, GL_FALSE, glm::value_ptr(view_proj));
   
     const bool use_texture = texture.IsValid() && texture.id <= textures_.size();
-    glUniform1i(glGetUniformLocation(mesh_shader_program_, "u_useTexture"),
-                use_texture ? 1 : 0);
+    glUniform1i(u_use_texture_loc_, use_texture ? 1 : 0);
     if (use_texture) {
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, textures_[texture.id - 1]);
-      glUniform1i(glGetUniformLocation(mesh_shader_program_, "u_texture"), 0);
     }
   
     glBindBuffer(GL_ARRAY_BUFFER, instance_vbo_);
@@ -478,4 +496,14 @@ void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture,const glm::mat4& 
                             static_cast<GLsizei>(models.size()));
     glBindVertexArray(0);
   }
+  bool Renderer::GetMeshBounds(MeshHandle mesh, glm::vec3& out_min, glm::vec3& out_max) const {
+    if (!mesh.IsValid() || mesh.id > meshes_.size()) return false;
+    const Mesh& m = meshes_[mesh.id - 1];
+    out_min = m.bounds_min;
+    out_max = m.bounds_max;
+    return true;
+  }
+  const glm::mat4& Renderer::GetViewMatrix() const { return view_matrix_; }
+  const glm::mat4& Renderer::GetProjectionMatrix() const { return projection_matrix_; }
+  glm::mat4 Renderer::GetViewProjectionMatrix() const { return projection_matrix_ * view_matrix_; }
 }  // namespace engine

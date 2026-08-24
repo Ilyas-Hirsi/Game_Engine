@@ -1,8 +1,36 @@
 #pragma once
 #include <cmath>
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include "MeshData.h"
 
 namespace engine::MeshFactory {
+
+// Appends `src` into `dst`, rotating then offsetting its positions, to bake
+// several primitives into one mesh. Assumes matching layouts with position
+// first; an empty `dst` adopts `src`'s layout.
+inline void Append(MeshData& dst, const MeshData& src,
+                   const glm::vec3& offset,
+                   const glm::quat& rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f)) {
+    if (dst.layout.empty()) dst.layout = src.layout;
+    const int stride = src.Stride();
+    const unsigned int base =
+        static_cast<unsigned int>(dst.vertices.size()) / stride;
+
+    dst.vertices.reserve(dst.vertices.size() + src.vertices.size());
+    for (std::size_t v = 0; v + stride <= src.vertices.size(); v += stride) {
+        const glm::vec3 p = rotation * glm::vec3(src.vertices[v],
+                                                 src.vertices[v + 1],
+                                                 src.vertices[v + 2]) + offset;
+        dst.vertices.push_back(p.x);
+        dst.vertices.push_back(p.y);
+        dst.vertices.push_back(p.z);
+        for (int k = 3; k < stride; ++k) dst.vertices.push_back(src.vertices[v + k]);
+    }
+
+    dst.indices.reserve(dst.indices.size() + src.indices.size());
+    for (unsigned int index : src.indices) dst.indices.push_back(base + index);
+}
 
     // All primitives use the layout: position(3) + color(3), stride 6 floats.
     // Sizes are unit (centered on the origin); scale via the entity transform.
@@ -92,7 +120,6 @@ inline MeshData Cube(float size = 1.0f) {
                 mesh.vertices.push_back(y);
                 mesh.vertices.push_back(z);
     
-                // White so the texture shows unmodified (texture * color).
                 mesh.vertices.push_back(1.0f);
                 mesh.vertices.push_back(1.0f);
                 mesh.vertices.push_back(1.0f);
@@ -121,10 +148,9 @@ inline MeshData Cube(float size = 1.0f) {
 
         return mesh;
     }
-    // Capsule with its long axis on Y. `height` is the cylinder section only,
-    // so total height = height + 2 * radius. Sizes are baked in here: scaling
-    // a capsule non-uniformly via the transform breaks the shape (and any
-    // future capsule collider), so keep entity scale at 1.
+    // Capsule with long axis on Y; `height` is the cylinder section only, so
+    // total height = height + 2 * radius. Sizes are baked in, so keep entity
+    // scale at 1 (non-uniform scale breaks the shape).
     inline MeshData Capsule(int segments = 32, float radius = 0.5f, float height = 1.0f) {
         MeshData mesh;
         mesh.layout = {{0, 3}, {1, 3}, {6, 2}};  // pos, color, uv (uv at location 6)
