@@ -15,6 +15,7 @@
 #include "Components/TextureComponent.h"
 #include "Components/SpriteComponent.h"
 #include "Components/ColliderComponent.h"
+#include "../Events/EventBus.h"
 namespace engine {
     class PhysicsSettings {
         public:
@@ -31,6 +32,7 @@ namespace engine {
         Entity CreateEntity();
         void DestroyEntity(Entity& entity);
         System& GetSystem();
+        EventBus& GetEventBus();
         EntityStorage& GetEntities();
         const EntityStorage& GetEntities() const;
         void HandleInput(Input& input, float deltaTime);
@@ -71,5 +73,6 @@ namespace engine {
         MeshComponent, CameraComponent, RigidBodyComponent, SpriteComponent,
         ColliderComponent, MovementComponent> registry_;
         PhysicsSettings physics_settings_;
+        EventBus event_bus_;
     };
 }

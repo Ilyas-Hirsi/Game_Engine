@@ -1,6 +1,7 @@
 #include "Scene/Components/CameraComponent.h"
 #include "Scene/Components/ColliderComponent.h"
 #include "Scene/Components/InputComponent.h"
+#include "Events/CollisionEvents.h"
 #include "Scene/Components/MeshComponent.h"
 #include "Scene/Components/TransformComponent.h"
 #include "Scene/Components/TextureComponent.h"
@@ -14,6 +15,7 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <string>
 #include <vector>
 
 
@@ -98,7 +100,10 @@ int main(int argc, char* argv[]) {
   }
 
   engine::Scene scene;
-
+  scene.GetEventBus().Subscribe<engine::CollisionEvent>(
+    [](const engine::CollisionEvent& e) {
+      
+    });
   // --- Camera ---------------------------------------------------------------
   engine::Entity camera = scene.CreateEntity();
   engine::TransformComponent camera_transform{};

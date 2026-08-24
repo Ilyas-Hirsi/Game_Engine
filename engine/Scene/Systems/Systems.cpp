@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 #include <ranges>
+#include "../../Events/EventBus.h"
+#include "../../Events/CollisionEvents.h"
 namespace engine {
 
 void System::HandleInput(Scene& scene, Input& input, float delta_time) {
@@ -126,7 +128,8 @@ void System::Collision(Scene& scene, float) {
     const float wa = ra ? ra->inverse_mass : 0.0f;
     const float wb = rb ? rb->inverse_mass : 0.0f;
     const float total = wa + wb;
-    if (total == 0.0f) return;  // two statics: nothing to do
+    float total_impulse = 0.0f;
+    if (total == 0.0f) return total_impulse;
 
     TransformComponent& ta = transforms.get(ea);
     TransformComponent& tb = transforms.get(eb);
@@ -170,6 +173,7 @@ void System::Collision(Scene& scene, float) {
       const float ra_rest = ra ? ra->restitution : default_restitution;
       const float rb_rest = rb ? rb->restitution : default_restitution;
       const float jimp = -(1.0f + 0.5f * (ra_rest + rb_rest)) * vn / denom;
+      total_impulse += jimp;
       const glm::vec3 impulse = c.normal * jimp;
       if (ra) {
         ra->linear_velocity  -= impulse * wa;
@@ -180,6 +184,7 @@ void System::Collision(Scene& scene, float) {
         rb->angular_velocity += apply_inv_inertia(rb, tb.rotation_quat, glm::cross(lever_b, impulse));
       }
     }
+    return total_impulse;
   };
 
   // Broad-phase sweep: narrow-test only AABB-overlapping pairs.
@@ -196,7 +201,12 @@ void System::Collision(Scene& scene, float) {
       manifold.Clear();
       Collide(ta.position, ta.rotation_quat, colliders.get(a.entity),
               tb.position, tb.rotation_quat, colliders.get(b.entity), manifold);
-      if (manifold.count > 0) resolve(a.entity, b.entity, manifold);
+      if (manifold.count > 0) {
+        const float j = resolve(a.entity, b.entity, manifold);
+        const Contact& c = manifold.contacts[0];
+        scene.GetEventBus().Publish(CollisionEvent{
+        Entity(a.entity), Entity(b.entity), c.normal, c.point, c.penetration, j});
+      }
     }
   }
 
@@ -213,7 +223,12 @@ void System::Collision(Scene& scene, float) {
       manifold.Clear();
       Collide(te->position, te->rotation_quat, colliders.get(entry.entity),
               plane_pos, plane_rot_quat, plane_collider, manifold);
-      if (manifold.count > 0) resolve(entry.entity, plane_entity, manifold);
+      if (manifold.count > 0) {
+        const float j = resolve(entry.entity, plane_entity, manifold);
+        const Contact& c = manifold.contacts[0];
+        scene.GetEventBus().Publish(CollisionEvent{
+        Entity(entry.entity), Entity(plane_entity), c.normal, c.point, c.penetration, j});
+      }
     }
   }
 }

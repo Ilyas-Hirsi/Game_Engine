@@ -14,9 +14,9 @@ namespace engine {
 // Narrow-phase result. `normal` points A->B (unit when `hit`); `penetration`
 // is the overlap depth. Resolution moves A along -normal, B along +normal.
 struct Contact {
-  bool      hit         = false;
-  glm::vec3 normal      = glm::vec3(0.0f);
-  float     penetration = 0.0f;
+  bool hit = false;
+  glm::vec3 normal = glm::vec3(0.0f);
+  float penetration = 0.0f;
   glm::vec3 point = glm::vec3(0.0f);
 };
 

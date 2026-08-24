@@ -1,5 +1,6 @@
 #include "Scene.h"
 #include "Components/TransformComponent.h"
+#include "../Events/CollisionEvents.h"
 namespace engine {
     Scene::Scene() {
 
@@ -20,6 +21,8 @@ namespace engine {
 
     System& Scene::GetSystem() { return system_; }
 
+    EventBus& Scene::GetEventBus() { return event_bus_; }
+
     EntityStorage& Scene::GetEntities() { return entities_; }
 
     const EntityStorage& Scene::GetEntities() const { return entities_; }
@@ -35,6 +38,7 @@ namespace engine {
     void Scene::FixedUpdate(float fixed_dt) {
         system_.FixedUpdate(*this, fixed_dt);
         system_.Collision(*this, fixed_dt);
+        event_bus_.Dispatch();
     }
     void Scene::Render(Renderer& renderer, float alpha) {
         OnRender(renderer, alpha);
