@@ -84,39 +84,51 @@ void System::FixedUpdate(Scene& scene, float fixed_dt) {
         });
 }
 
-// Simple sweep-and-prune broad phase.
-void System::Collision(Scene& scene, float) {
+void System::Collision(Scene& scene, float delta_time) {
+  (void)delta_time;
+
   auto& colliders = scene.pool<ColliderComponent>();
   auto& transforms = scene.pool<TransformComponent>();
   auto& rigid_bodies = scene.pool<RigidBodyComponent>();
-  auto& dense = colliders.dense_entities;
 
   const float default_restitution = 0.6f;
 
-  // Detect added/removed colliders that invalidate the sweep array.
-  std::size_t sweepable = 0;
-  for (entity_t entity : dense) {
-    if (!transforms.contains(entity)) continue;
-    if (HasPlane(colliders.get(entity))) continue;
-    ++sweepable;
-  }
-  bool rebuild = sweepable != sweep_entries_.size();
-  if (!rebuild) {
-    for (auto& entry : sweep_entries_) {
-      if (!transforms.contains(entry.entity) || !colliders.contains(entry.entity)) {
-        rebuild = true;
-        break;
-      }
-      TransformComponent& t = transforms.get(entry.entity);
-      entry.aabb = ComputeAABB(t.position, t.rotation_quat,
-                               colliders.get(entry.entity));
+  // Apply queued removals, then insertions, before any query.
+  for (entity_t entity : scene.GetCollidersToDestroy()) {
+    auto d = dynamic_proxies_.find(entity);
+    if (d != dynamic_proxies_.end()) {
+      dynamic_tree_.RemoveLeaf(d->second);
+      dynamic_proxies_.erase(d);
+      continue;
+    }
+    auto s = static_proxies_.find(entity);
+    if (s != static_proxies_.end()) {
+      static_tree_.RemoveLeaf(s->second);
+      static_proxies_.erase(s);
     }
   }
+  scene.GetCollidersToDestroy().clear();
 
-  if (rebuild) {
-    BuildAABBs(scene);
-  } else {
-    SortSweepEntries();
+  for (entity_t entity : scene.GetCollidersToCreate()) {
+    if (!colliders.contains(entity) || !transforms.contains(entity)) continue;
+    const ColliderComponent& collider = colliders.get(entity);
+    if (HasPlane(collider)) continue;  // planes never enter the trees
+    const TransformComponent& t = transforms.get(entity);
+    const AABB box = ComputeAABB(t.position, t.rotation_quat, collider);
+    if (collider.is_static) {
+      static_proxies_[entity] = static_tree_.InsertLeaf(entity, box);
+    } else {
+      dynamic_proxies_[entity] = dynamic_tree_.InsertLeaf(entity, box);
+    }
+  }
+  scene.GetCollidersToCreate().clear();
+
+  // Refresh dynamic proxies to their post-integration positions.
+  for (auto& [entity, proxy] : dynamic_proxies_) {
+    if (!transforms.contains(entity) || !colliders.contains(entity)) continue;
+    const TransformComponent& t = transforms.get(entity);
+    proxy = dynamic_tree_.UpdateLeaf(
+        proxy, ComputeAABB(t.position, t.rotation_quat, colliders.get(entity)));
   }
 
   // Resolve a pair's contacts sequentially: each impulse updates the velocities
@@ -187,47 +199,60 @@ void System::Collision(Scene& scene, float) {
     return total_impulse;
   };
 
-  // Broad-phase sweep: narrow-test only AABB-overlapping pairs.
   ContactManifold manifold;
-  for (std::size_t i = 0; i < sweep_entries_.size(); ++i) {
-    const SweepEntry& a = sweep_entries_[i];
-    for (std::size_t j = i + 1; j < sweep_entries_.size(); ++j) {
-      const SweepEntry& b = sweep_entries_[j];
-      if (b.aabb.min.x > a.aabb.max.x) break;
-      if (a.aabb.min.y > b.aabb.max.y || a.aabb.max.y < b.aabb.min.y) continue;
-      if (a.aabb.min.z > b.aabb.max.z || a.aabb.max.z < b.aabb.min.z) continue;
-      TransformComponent& ta = transforms.get(a.entity);
-      TransformComponent& tb = transforms.get(b.entity);
-      manifold.Clear();
-      Collide(ta.position, ta.rotation_quat, colliders.get(a.entity),
-              tb.position, tb.rotation_quat, colliders.get(b.entity), manifold);
-      if (manifold.count > 0) {
-        const float j = resolve(a.entity, b.entity, manifold);
-        const Contact& c = manifold.contacts[0];
-        scene.GetEventBus().Publish(CollisionEvent{
-        Entity(a.entity), Entity(b.entity), c.normal, c.point, c.penetration, j});
-      }
+  auto narrow = [&](entity_t ea, entity_t eb) {
+    TransformComponent& ta = transforms.get(ea);
+    TransformComponent& tb = transforms.get(eb);
+    manifold.Clear();
+    Collide(ta.position, ta.rotation_quat, colliders.get(ea),
+            tb.position, tb.rotation_quat, colliders.get(eb), manifold);
+    if (manifold.count > 0) {
+      const float j = resolve(ea, eb, manifold);
+      const Contact& c = manifold.contacts[0];
+      scene.GetEventBus().Publish(CollisionEvent{
+      Entity(ea), Entity(eb), c.normal, c.point, c.penetration, j});
     }
+  };
+
+  // Broad phase: each dynamic body against the dynamic tree (deduped by id
+  // ordering, self skipped) then the static tree.
+  std::vector<entity_t> candidates;
+  for (const auto& [entity, proxy] : dynamic_proxies_) {
+    (void)proxy;
+    if (!transforms.contains(entity) || !colliders.contains(entity)) continue;
+    const TransformComponent& t = transforms.get(entity);
+    const AABB box = ComputeAABB(t.position, t.rotation_quat, colliders.get(entity));
+
+    candidates.clear();
+    dynamic_tree_.Query(box, [&](entity_t other) {
+      if (other > entity) candidates.push_back(other);
+    });
+    static_tree_.Query(box, [&](entity_t other) {
+      candidates.push_back(other);
+    });
+    for (entity_t other : candidates) narrow(entity, other);
   }
 
-  // Plane colliders are excluded from the sweep and handled separately
-  for (entity_t plane_entity : dense) {
+  // Planes are excluded from the trees and handled separately.
+  for (entity_t plane_entity : colliders.dense_entities) {
     ColliderComponent& plane_collider = colliders.get(plane_entity);
     if (!HasPlane(plane_collider)) continue;
     TransformComponent* tp = transforms.try_get(plane_entity);
     const glm::vec3 plane_pos = tp ? tp->position : glm::vec3(0.0f);
     const glm::quat plane_rot_quat = tp ? tp->rotation_quat : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
-    for (const SweepEntry& entry : sweep_entries_) {
-      TransformComponent* te = transforms.try_get(entry.entity);
+    for (const auto& [entity, proxy] : dynamic_proxies_) {
+      (void)proxy;
+      TransformComponent* te = transforms.try_get(entity);
+      if (!te) continue;
       manifold.Clear();
-      Collide(te->position, te->rotation_quat, colliders.get(entry.entity),
+      Collide(te->position, te->rotation_quat, colliders.get(entity),
               plane_pos, plane_rot_quat, plane_collider, manifold);
       if (manifold.count > 0) {
-        const float j = resolve(entry.entity, plane_entity, manifold);
+        const float j = resolve(entity, plane_entity, manifold);
         const Contact& c = manifold.contacts[0];
         scene.GetEventBus().Publish(CollisionEvent{
-        Entity(entry.entity), Entity(plane_entity), c.normal, c.point, c.penetration, j});
+        Entity(entity), Entity(plane_entity), c.normal, c.point, c.penetration, j});
       }
     }
   }
@@ -343,38 +368,4 @@ void System::Render(Scene& scene, Renderer& renderer, float alpha) {
   
 }
 
-// Full rebuild of the sweep array, used on startup and when colliders are
-// added/removed.
-void System::BuildAABBs(Scene& scene) {
-  auto& colliders  = scene.pool<ColliderComponent>();
-  auto& transforms = scene.pool<TransformComponent>();
-
-  sweep_entries_.clear();
-  for (entity_t entity : colliders.dense_entities) {
-    if (!transforms.contains(entity)) continue;
-    const ColliderComponent& collider = colliders.get(entity);
-    if (HasPlane(collider)) continue;  // planes get their own pass
-    TransformComponent& t = transforms.get(entity);
-    sweep_entries_.push_back(
-        {entity, ComputeAABB(t.position, t.rotation_quat, collider)});
-  }
-
-  std::sort(sweep_entries_.begin(), sweep_entries_.end(),
-            [](const SweepEntry& a, const SweepEntry& b) {
-              return a.aabb.min.x < b.aabb.min.x;
-            });
-}
-
-// Insertion sort by min.x
-void System::SortSweepEntries() {
-  for (std::size_t i = 1; i < sweep_entries_.size(); ++i) {
-    SweepEntry entry = sweep_entries_[i];
-    std::size_t j = i;
-    while (j > 0 && sweep_entries_[j - 1].aabb.min.x > entry.aabb.min.x) {
-      sweep_entries_[j] = sweep_entries_[j - 1];
-      --j;
-    }
-    sweep_entries_[j] = entry;
-  }
-}
 }  // namespace engine

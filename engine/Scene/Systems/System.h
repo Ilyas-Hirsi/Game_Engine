@@ -5,14 +5,11 @@
 #include <unordered_map>
 #include <vector>
 #include <glm/glm.hpp>
+#include "../AABBTree.h"
 namespace engine {
 
 class Renderer;
 class Scene;
-struct SweepEntry {
-  entity_t entity;
-  AABB     aabb;
-};
 
 class System {
  public:
@@ -25,11 +22,10 @@ class System {
    void UpdateCamera(Scene& scene, Renderer& renderer);
   private:
    std::unordered_map<std::uint64_t, std::vector<glm::mat4>> batches;
-   std::vector<SweepEntry> sweep_entries_;
-   void BuildAABBs(Scene& scene);
-   void SortSweepEntries();
-
-   
+   BVHTree dynamic_tree_;
+   BVHTree static_tree_;
+   std::unordered_map<entity_t, int> dynamic_proxies_;
+   std::unordered_map<entity_t, int> static_proxies_;
 };
 
 

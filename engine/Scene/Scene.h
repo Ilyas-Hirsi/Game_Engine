@@ -41,8 +41,13 @@ namespace engine {
         void Render(Renderer& renderer, float alpha = 0.0f);
         PhysicsSettings& GetPhysicsSettings() {return physics_settings_;};
         const PhysicsSettings& GetPhysicsSettings() const {return physics_settings_;};
+        std::vector<entity_t>& GetCollidersToCreate() {return colliders_to_create;};
+        std::vector<entity_t>& GetCollidersToDestroy() {return colliders_to_destroy;};
         template <typename T, typename... Args>
         T& emplace(const Entity& ent, Args&&... args){
+            if constexpr (std::is_same_v<T, ColliderComponent>){
+                colliders_to_create.push_back(ent.GetId());
+            }
             return registry_.emplace<T>(ent, std::forward<Args>(args)...);
         }
         template <typename T>
@@ -74,5 +79,7 @@ namespace engine {
         ColliderComponent, MovementComponent> registry_;
         PhysicsSettings physics_settings_;
         EventBus event_bus_;
+        std::vector<entity_t> colliders_to_create;
+        std::vector<entity_t> colliders_to_destroy;
     };
 }

@@ -102,7 +102,7 @@ int main(int argc, char* argv[]) {
   engine::Scene scene;
   scene.GetEventBus().Subscribe<engine::CollisionEvent>(
     [](const engine::CollisionEvent& e) {
-      
+      (void)e;
     });
   // --- Camera ---------------------------------------------------------------
   engine::Entity camera = scene.CreateEntity();

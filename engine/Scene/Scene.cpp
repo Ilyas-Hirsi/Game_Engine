@@ -14,10 +14,11 @@ namespace engine {
     void Scene::DestroyEntity(Entity& entity) {
         if (!entities_.valid(entity.GetId())) return;
         uint32_t id = entity.GetId();
+        if (pool<ColliderComponent>().contains(id))
+          colliders_to_destroy.push_back(id);
         registry_.removeAll(id);
         entities_.destroy(id);
-
-    }
+      }
 
     System& Scene::GetSystem() { return system_; }
 
