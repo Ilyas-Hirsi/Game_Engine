@@ -59,9 +59,8 @@ void System::HandleInput(Scene& scene, Input& input, float delta_time) {
   });
 }
 void System::Update(Scene& scene, float delta_time) {
-  scene.view<TransformComponent, MovementComponent>().each(
+  scene.view<TransformComponent, MovementComponent>().par_each(scene.GetTaskScheduler(),
     [&](uint32_t, TransformComponent& t, MovementComponent& m) {
-
       t.position += m.move_direction * m.speed * delta_time;
     }
   );
@@ -70,7 +69,7 @@ void System::Update(Scene& scene, float delta_time) {
 void System::FixedUpdate(Scene& scene, float fixed_dt) {
     // Manage Gravity
     auto& physics_settings = scene.GetPhysicsSettings();
-    scene.view<TransformComponent, RigidBodyComponent>().each(
+    scene.view<TransformComponent, RigidBodyComponent>().par_each(scene.GetTaskScheduler(),
         [&](uint32_t, TransformComponent& t, RigidBodyComponent& rb) {
             rb.previous_position = t.position;
             rb.previous_rotation_quat = t.rotation_quat;
@@ -196,64 +195,70 @@ void System::Collision(Scene& scene, float delta_time) {
         rb->angular_velocity += apply_inv_inertia(rb, tb.rotation_quat, glm::cross(lever_b, impulse));
       }
     }
+    const Contact& c = manifold.contacts[0];
+    scene.GetEventBus().Publish(CollisionEvent{
+    Entity(ea), Entity(eb), c.normal, c.point, c.penetration, total_impulse});
     return total_impulse;
   };
 
-  ContactManifold manifold;
-  auto narrow = [&](entity_t ea, entity_t eb) {
-    TransformComponent& ta = transforms.get(ea);
-    TransformComponent& tb = transforms.get(eb);
-    manifold.Clear();
-    Collide(ta.position, ta.rotation_quat, colliders.get(ea),
-            tb.position, tb.rotation_quat, colliders.get(eb), manifold);
-    if (manifold.count > 0) {
-      const float j = resolve(ea, eb, manifold);
-      const Contact& c = manifold.contacts[0];
-      scene.GetEventBus().Publish(CollisionEvent{
-      Entity(ea), Entity(eb), c.normal, c.point, c.penetration, j});
-    }
-  };
-
-  // Broad phase: each dynamic body against the dynamic tree (deduped by id
-  // ordering, self skipped) then the static tree.
-  std::vector<entity_t> candidates;
+  std::vector<entity_t> dynamic_entities;
+  dynamic_entities.reserve(dynamic_proxies_.size());
   for (const auto& [entity, proxy] : dynamic_proxies_) {
     (void)proxy;
-    if (!transforms.contains(entity) || !colliders.contains(entity)) continue;
+    dynamic_entities.push_back(entity);
+  }
+
+  std::vector<entity_t> plane_entities;
+  for (entity_t plane_entity : colliders.dense_entities) {
+    if (HasPlane(colliders.get(plane_entity))) plane_entities.push_back(plane_entity);
+  }
+
+  std::vector<std::vector<entity_t>> candidates(dynamic_entities.size());
+  scene.GetTaskScheduler().parallel_for(0, dynamic_entities.size(), [&](std::size_t i) {
+    const entity_t entity = dynamic_entities[i];
+    if (!transforms.contains(entity) || !colliders.contains(entity)) return;
     const TransformComponent& t = transforms.get(entity);
     const AABB box = ComputeAABB(t.position, t.rotation_quat, colliders.get(entity));
 
-    candidates.clear();
     dynamic_tree_.Query(box, [&](entity_t other) {
-      if (other > entity) candidates.push_back(other);
+      if (other > entity) candidates[i].push_back(other);
     });
     static_tree_.Query(box, [&](entity_t other) {
-      candidates.push_back(other);
+      candidates[i].push_back(other);
     });
-    for (entity_t other : candidates) narrow(entity, other);
-  }
+  });
 
-  // Planes are excluded from the trees and handled separately.
-  for (entity_t plane_entity : colliders.dense_entities) {
-    ColliderComponent& plane_collider = colliders.get(plane_entity);
-    if (!HasPlane(plane_collider)) continue;
-    TransformComponent* tp = transforms.try_get(plane_entity);
-    const glm::vec3 plane_pos = tp ? tp->position : glm::vec3(0.0f);
-    const glm::quat plane_rot_quat = tp ? tp->rotation_quat : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+  struct PairContact { entity_t a; entity_t b; ContactManifold manifold; };
+  std::vector<std::vector<PairContact>> pair_contacts(dynamic_entities.size());
+  scene.GetTaskScheduler().parallel_for(0, dynamic_entities.size(), [&](std::size_t i) {
+    const entity_t entity = dynamic_entities[i];
+    TransformComponent* te = transforms.try_get(entity);
+    if (!te || !colliders.contains(entity)) return;
+    const ColliderComponent& ce = colliders.get(entity);
 
-    for (const auto& [entity, proxy] : dynamic_proxies_) {
-      (void)proxy;
-      TransformComponent* te = transforms.try_get(entity);
-      if (!te) continue;
-      manifold.Clear();
-      Collide(te->position, te->rotation_quat, colliders.get(entity),
-              plane_pos, plane_rot_quat, plane_collider, manifold);
-      if (manifold.count > 0) {
-        const float j = resolve(entity, plane_entity, manifold);
-        const Contact& c = manifold.contacts[0];
-        scene.GetEventBus().Publish(CollisionEvent{
-        Entity(entity), Entity(plane_entity), c.normal, c.point, c.penetration, j});
-      }
+    for (entity_t other : candidates[i]) {
+      TransformComponent* to = transforms.try_get(other);
+      if (!to || !colliders.contains(other)) continue;
+      ContactManifold manifold;
+      Collide(te->position, te->rotation_quat, ce,
+              to->position, to->rotation_quat, colliders.get(other), manifold);
+      if (manifold.count > 0) pair_contacts[i].push_back({entity, other, manifold});
+    }
+
+    for (entity_t plane_entity : plane_entities) {
+      TransformComponent* tp = transforms.try_get(plane_entity);
+      const glm::vec3 plane_pos = tp ? tp->position : glm::vec3(0.0f);
+      const glm::quat plane_rot_quat = tp ? tp->rotation_quat : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+      ContactManifold manifold;
+      Collide(te->position, te->rotation_quat, ce,
+              plane_pos, plane_rot_quat, colliders.get(plane_entity), manifold);
+      if (manifold.count > 0) pair_contacts[i].push_back({entity, plane_entity, manifold});
+    }
+  });
+
+  for (std::size_t i = 0; i < pair_contacts.size(); ++i) {
+    for (const PairContact& pc : pair_contacts[i]) {
+      resolve(pc.a, pc.b, pc.manifold);
     }
   }
 }

@@ -20,6 +20,7 @@ add_library(EngineCore STATIC
   core/Timer.cpp
   Scene/Scene.cpp
   Scene/Systems/Systems.cpp
+  core/TaskScheduler.cpp
 )
 target_include_directories(EngineCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(EngineCore PUBLIC EnginePlatform)

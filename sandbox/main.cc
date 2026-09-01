@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
   const float kBodyExtent = 4.0f;  // spawn margin: roughly a character's reach
   // Each character is 6 primitives, so entity-pair narrow phase is ~36 child
   // tests; fewer, larger bodies than the old sphere demo keeps the cost sane.
-  const int   kBodyCount  = 500;
+  const int   kBodyCount  = 3000;
 
   // Lifetime churn: each character lives a few seconds, then is destroyed and
   // respawned from the spawner, holding the population at kBodyCount while

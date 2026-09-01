@@ -16,6 +16,7 @@
 #include "Components/SpriteComponent.h"
 #include "Components/ColliderComponent.h"
 #include "../Events/EventBus.h"
+#include "../core/TaskScheduler.h"
 namespace engine {
     class PhysicsSettings {
         public:
@@ -43,6 +44,7 @@ namespace engine {
         const PhysicsSettings& GetPhysicsSettings() const {return physics_settings_;};
         std::vector<entity_t>& GetCollidersToCreate() {return colliders_to_create;};
         std::vector<entity_t>& GetCollidersToDestroy() {return colliders_to_destroy;};
+        TaskScheduler& GetTaskScheduler() {return task_scheduler_;};
         template <typename T, typename... Args>
         T& emplace(const Entity& ent, Args&&... args){
             if constexpr (std::is_same_v<T, ColliderComponent>){
@@ -81,5 +83,6 @@ namespace engine {
         EventBus event_bus_;
         std::vector<entity_t> colliders_to_create;
         std::vector<entity_t> colliders_to_destroy;
+        TaskScheduler task_scheduler_;
     };
 }

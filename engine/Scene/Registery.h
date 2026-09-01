@@ -7,6 +7,7 @@
 #include <utility>
 #include "Entity.h"
 #include "core/Assert.h"
+#include "core/TaskScheduler.h"
 namespace engine {
 
 template <class T> struct SparseSet {
@@ -64,6 +65,18 @@ class View {
                 func(e, std::get<SparseSet<Components>*>(pools_)->get(e)...);
             }
         }
+    }
+        template <typename Func>
+    void par_each(TaskScheduler& scheduler, Func func) {
+        auto* lead = std::get<0>(pools_);
+        const std::size_t n = lead->dense_entities.size();
+
+        scheduler.parallel_for(0, n, [&](std::size_t i) {
+            entity_t e = lead->dense_entities[i];
+            if ((std::get<SparseSet<Components>*>(pools_)->contains(e) && ...)) {
+                func(e, std::get<SparseSet<Components>*>(pools_)->get(e)...);
+            }
+        });
     }
 
     private:
