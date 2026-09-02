@@ -1,6 +1,8 @@
 #include "Window.h"
 
 #include <SDL.h>
+#include <imgui.h>
+#include <imgui_impl_sdl2.h>
 
 #include <algorithm>
 
@@ -99,8 +101,15 @@ void Window::Shutdown() {
 void Window::PollEvents(Input& input) {
   input.BeginFrame();
 
+  const bool imgui_active = ImGui::GetCurrentContext() != nullptr;
+  // Makes sure input to UI is not passed to the game.
+  const bool imgui_wants_keyboard =
+      imgui_active && ImGui::GetIO().WantCaptureKeyboard;
+
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
+    if (imgui_active) ImGui_ImplSDL2_ProcessEvent(&event);
+
     switch (event.type) {
       case SDL_QUIT:
         should_close_ = true;
@@ -119,10 +128,10 @@ void Window::PollEvents(Input& input) {
         }
         break;
       case SDL_KEYDOWN:
-        if (event.key.keysym.sym == SDLK_ESCAPE) {
+        if (event.key.keysym.sym == SDLK_ESCAPE && !imgui_wants_keyboard) {
           should_close_ = true;
         }
-        if (!event.key.repeat) {
+        if (!imgui_wants_keyboard && !event.key.repeat) {
           KeyCode key;
           if (TryMapKeyCode(event.key.keysym.sym, key)) {
             input.SetKeyDown(key);
@@ -130,9 +139,11 @@ void Window::PollEvents(Input& input) {
         }
         break;
       case SDL_KEYUP:
-        KeyCode key;
-        if (TryMapKeyCode(event.key.keysym.sym, key)) {
-          input.SetKeyUp(key);
+        if (!imgui_wants_keyboard) {
+          KeyCode key;
+          if (TryMapKeyCode(event.key.keysym.sym, key)) {
+            input.SetKeyUp(key);
+          }
         }
         break;
       default:

@@ -46,6 +46,7 @@ class Renderer {
 
   bool GetMeshBounds(MeshHandle mesh, glm::vec3& out_min, glm::vec3& out_max) const;
 
+  SDL_GLContext GetGLContext() const { return gl_context_; }
   void SetCamera(const glm::mat4& view, const glm::mat4& projection);
   float GetAspectRatio() const;
   const glm::mat4& GetViewMatrix() const;
