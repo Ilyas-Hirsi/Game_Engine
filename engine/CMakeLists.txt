@@ -3,6 +3,7 @@ add_library(EnginePlatform STATIC
   platform/Renderer.cpp
   platform/Input/Input.cpp
   ui/ImGuiLayer.cpp
+  assets/AssetRegistry.cpp
 )
 target_include_directories(EnginePlatform PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -24,6 +25,7 @@ add_library(EngineCore STATIC
   Scene/Systems/Systems.cpp
   core/TaskScheduler.cpp
   platform/Application.cpp
+  ui/Inspector.cpp
 )
 target_include_directories(EngineCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(EngineCore PUBLIC EnginePlatform)

@@ -28,6 +28,10 @@ namespace engine {
     class Scene {
 
         public:
+        using Registry = ECSRegistry<InputComponent, TransformComponent, TextureComponent,
+        MeshComponent, CameraComponent, RigidBodyComponent, SpriteComponent,
+        ColliderComponent, MovementComponent>;
+
         Scene();
         virtual ~Scene();
         Entity CreateEntity();
@@ -76,9 +80,7 @@ namespace engine {
         System system_;
         std::uint32_t next_entity_id_ = 0;
         EntityStorage entities_;
-        ECSRegistry<InputComponent, TransformComponent, TextureComponent,
-        MeshComponent, CameraComponent, RigidBodyComponent, SpriteComponent,
-        ColliderComponent, MovementComponent> registry_;
+        Registry registry_;
         PhysicsSettings physics_settings_;
         EventBus event_bus_;
         std::vector<entity_t> colliders_to_create;

@@ -8,7 +8,7 @@
 namespace engine {
 
 Application::Application(const std::string& name, int width, int height)
-    : window_(name, width, height), renderer_(), timer_() {
+    : window_(name, width, height), renderer_(), timer_(), assets_(renderer_) {
     InitializeEngine();
 }
 
@@ -100,4 +100,5 @@ Renderer& Application::GetRenderer() { return renderer_; }
 Timer& Application::GetTimer() { return timer_; }
 Scene& Application::GetScene() { return scene_; }
 Input& Application::GetInput() { return input_; }
+AssetRegistry& Application::GetAssets() { return assets_; }
 }

@@ -50,6 +50,22 @@ bool TryMapKeyCode(SDL_Keycode sdl_key, KeyCode& key) {
   }
 }
 
+bool TryMapMouseButton(Uint8 sdl_button, MouseButton& button) {
+  switch (sdl_button) {
+    case SDL_BUTTON_LEFT:
+      button = MouseButton::Left;
+      return true;
+    case SDL_BUTTON_RIGHT:
+      button = MouseButton::Right;
+      return true;
+    case SDL_BUTTON_MIDDLE:
+      button = MouseButton::Middle;
+      return true;
+    default:
+      return false;
+  }
+}
+
 }  // namespace
 
   Window::Window(const std::string& name, int width, int height)
@@ -105,6 +121,9 @@ void Window::PollEvents(Input& input) {
   // Makes sure input to UI is not passed to the game.
   const bool imgui_wants_keyboard =
       imgui_active && ImGui::GetIO().WantCaptureKeyboard;
+  
+  const bool imgui_wants_mouse = 
+      imgui_active && ImGui::GetIO().WantCaptureMouse;
 
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
@@ -139,13 +158,42 @@ void Window::PollEvents(Input& input) {
         }
         break;
       case SDL_KEYUP:
-        if (!imgui_wants_keyboard) {
           KeyCode key;
           if (TryMapKeyCode(event.key.keysym.sym, key)) {
             input.SetKeyUp(key);
           }
+        break;
+      case SDL_MOUSEBUTTONDOWN: {
+        MouseButton button;
+        if (!imgui_wants_mouse && TryMapMouseButton(event.button.button, button)) {
+          input.SetMouseButtonDown(button);
         }
         break;
+      }
+      // Never gated: a press that starts in the scene and ends over a panel
+      // would otherwise leave the button stuck down.
+      case SDL_MOUSEBUTTONUP: {
+        MouseButton button;
+        if (TryMapMouseButton(event.button.button, button)) {
+          input.SetMouseButtonUp(button);
+        }
+        break;
+      }
+      case SDL_MOUSEMOTION:
+        // Position tracks even under the UI so it cannot go stale; only the
+        // delta that drives the camera is withheld.
+        input.SetMousePosition(event.motion.x, event.motion.y);
+        if (!imgui_wants_mouse) {
+          input.AddMouseDelta(event.motion.xrel, event.motion.yrel);
+        }
+        break;
+
+      case SDL_MOUSEWHEEL:
+        if (!imgui_wants_mouse) {
+          input.AddMouseWheel(event.wheel.preciseY);
+        }
+        break;
+
       default:
         break;
     }

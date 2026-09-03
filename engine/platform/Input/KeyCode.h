@@ -15,3 +15,10 @@ enum class KeyCode {
     Count
 
 };
+
+enum class MouseButton {
+    Left,
+    Right,
+    Middle,
+    Count
+};

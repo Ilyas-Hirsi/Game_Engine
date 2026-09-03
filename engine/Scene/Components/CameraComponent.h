@@ -2,7 +2,6 @@
 #include <cstdint>
 namespace engine{
     struct CameraComponent {
-        std::uint32_t entity_id = 0;
         float fov = 45.0f;
         float aspect_ratio = 16.0f / 9.0f;
         float near_plane = 0.1f;

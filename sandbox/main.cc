@@ -7,6 +7,7 @@
 #include "Scene/Components/TransformComponent.h"
 #include "core/Log.h"
 #include "platform/MeshFactory.h"
+#include "ui/Inspector.h"
 
 #include <imgui.h>
 #include <random>
@@ -170,11 +171,14 @@ class Sandbox : public engine::Application {
  protected:
   void OnStartup() override {
     engine::Scene& scene = GetScene();
-    engine::Renderer& renderer = GetRenderer();
+    engine::AssetRegistry& assets = GetAssets();
+
+    assets.RegisterMeshBuilder("plane", engine::MeshFactory::Plane);
+    assets.RegisterMeshBuilder("character", BuildCharacterMesh);
 
     SpawnCamera(scene, glm::vec3(0.0f, 20.0f, 130.0f));
 
-    SpawnFloor(scene, renderer.CreateMesh(engine::MeshFactory::Plane()));
+    SpawnFloor(scene, assets.Mesh("plane"));
     SpawnWall(scene, glm::vec3( 1.0f, 0.0f,  0.0f));  // left  (x >= -kHalf)
     SpawnWall(scene, glm::vec3(-1.0f, 0.0f,  0.0f));  // right (x <=  kHalf)
     SpawnWall(scene, glm::vec3( 0.0f, 0.0f,  1.0f));  // back  (z >= -kHalf)
@@ -182,9 +186,9 @@ class Sandbox : public engine::Application {
 
     // One baked mesh shared by every character; the compound collider mirrors
     // it part-for-part via kCharacterParts.
-    const engine::MeshHandle character_mesh = renderer.CreateMesh(BuildCharacterMesh());
+    const engine::MeshHandle character_mesh = assets.Mesh("character");
     const engine::TextureHandle crate_tex =
-        renderer.LoadTexture("C:/Users/ilyas/Downloads/mauga.jpeg");  // path to test texture
+        assets.Texture("C:/Users/ilyas/Downloads/mauga.jpeg");  // path to test texture
 
     std::mt19937 rng(1337u);
     std::uniform_real_distribution<float> spread(-kHalf + kBodyExtent, kHalf - kBodyExtent);
@@ -206,7 +210,12 @@ class Sandbox : public engine::Application {
     // Writes straight into the live PhysicsSettings the fixed step reads.
     ImGui::DragFloat3("Gravity", &GetScene().GetPhysicsSettings().gravity.x, 0.5f);
     ImGui::End();
+
+    engine::DrawInspector(GetScene(), GetAssets(), selected_);
   }
+
+ private:
+  entity_t selected_ = 0;
 };
 
 int main(int argc, char* argv[]) {

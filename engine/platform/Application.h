@@ -5,6 +5,7 @@
 #include "../Scene/Scene.h"
 #include "../Scene/Systems/System.h"
 #include "../ui/ImGuiLayer.h"
+#include "../assets/AssetRegistry.h"
 #include <string>
 namespace engine {
 
@@ -19,14 +20,13 @@ namespace engine {
         virtual void OnShutdown();
         virtual void OnUpdate(float deltaTime);
         virtual void OnRender();
-        // Build ImGui panels here. Called once per frame between the scene draw
-        // and the buffer swap, so widgets overlay the scene.
         virtual void OnImGui();
         Window& GetWindow();
         Renderer& GetRenderer();
         Timer& GetTimer();
         Scene& GetScene();
         Input& GetInput();
+        AssetRegistry& GetAssets();
         Application(const Application&) = delete;
         Application& operator=(const Application&) = delete;
         private:
@@ -41,6 +41,7 @@ namespace engine {
         Timer timer_;
         Input input_;
         Scene scene_;
+        AssetRegistry assets_;
         ImGuiLayer imgui_layer_;
 
     };

@@ -13,9 +13,9 @@ namespace engine {
 template <class T> struct SparseSet {
     static constexpr uint32_t NONE = std::numeric_limits<uint32_t>::max();
 
-    std::vector<entity_t> sparse; // sprase set of entity ids
-    std::vector<entity_t> dense_entities; // dense set of entity ids
-    std::vector<T>        dense;           // dense set of components
+    std::vector<entity_t> sparse;
+    std::vector<entity_t> dense_entities;
+    std::vector<T>        dense;
 
     bool contains(entity_t e) const { return index_of(e) < sparse.size() && sparse[index_of(e)] != NONE; }
     T&   get(entity_t e)            { 
@@ -89,6 +89,9 @@ class ECSRegistry {
     std::tuple<SparseSet<component_types>...> storage_;
 
     public:
+    // Lets callers expand the component type list without repeating it.
+    using component_list = std::tuple<component_types...>;
+
     template <typename T>
     SparseSet<T>& pool() { return std::get<SparseSet<T>>(storage_); }
 
@@ -125,4 +128,5 @@ class ECSRegistry {
         }, storage_);
     }
 };
+
 }  // namespace engine
