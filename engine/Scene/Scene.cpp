@@ -44,9 +44,20 @@ namespace engine {
     void Scene::Render(Renderer& renderer, float alpha) {
         OnRender(renderer, alpha);
     }
+    std::optional<CameraMatrices> Scene::ActiveCameraMatrices(float aspect) {
+        std::optional<CameraMatrices> result;
+        view<CameraComponent, TransformComponent, MovementComponent>().each(
+            [&](std::uint32_t, CameraComponent& camera, TransformComponent& transform,
+                MovementComponent& move) {
+                
+                if (result || !camera.active) return;
+                result = ComputeCamera(camera, transform, move, aspect);
+            });
+        return result;
+    }
+
     void Scene::OnUpdate(float deltaTime) {
-        // Move everything (input + physics integration), then resolve the
-        // overlaps that motion produced.
+
         system_.Update(*this, deltaTime);
     }
 

@@ -27,9 +27,9 @@ template <> struct Reflect<CameraComponent> {
   static constexpr const char* kName = "Camera";
   template <class C, class V> static void Fields(C& c, V&& visit) {
     visit("fov", c.fov);
-    visit("aspect_ratio", c.aspect_ratio);
     visit("near_plane", c.near_plane);
     visit("far_plane", c.far_plane);
+    visit("active", c.active);
   }
 };
 

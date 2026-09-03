@@ -15,6 +15,7 @@
 #include <ranges>
 #include "../../Events/EventBus.h"
 #include "../../Events/CollisionEvents.h"
+#include "../Camera.h"
 namespace engine {
 
 void System::HandleInput(Scene& scene, Input& input, float delta_time) {
@@ -264,22 +265,10 @@ void System::Collision(Scene& scene, float delta_time) {
 }
 
 void System::UpdateCamera(Scene& scene, Renderer& renderer) {
-  bool camera_set = false;
-  scene.view<CameraComponent, TransformComponent, MovementComponent>().each(
-      [&](uint32_t, CameraComponent& camera, TransformComponent& transform, MovementComponent& move) {
-    if (camera_set) return;  // only the first camera drives the view
-
-    const float aspect = renderer.GetAspectRatio();
-    const glm::mat4 projection = glm::perspective(
-        glm::radians(camera.fov), aspect, camera.near_plane, camera.far_plane);
-    const glm::mat4 view = glm::lookAt(
-        transform.position,
-        transform.position + move.facing,
-        glm::vec3(0.0f, 1.0f, 0.0f));
-
-    renderer.SetCamera(view, projection);
-    camera_set = true;
-  });
+  // No active camera leaves the previous frame's matrices in place.
+  if (auto matrices = scene.ActiveCameraMatrices(renderer.GetAspectRatio())) {
+    renderer.SetCamera(matrices->view, matrices->projection);
+  }
 }
 
 void System::Render(Scene& scene, Renderer& renderer, float alpha) {
@@ -316,7 +305,6 @@ void System::Render(Scene& scene, Renderer& renderer, float alpha) {
     return true;
   };
 
-  auto& camera = scene.pool<CameraComponent>().get(0); // get the first camera component
   scene.view<SpriteComponent, TransformComponent>().each(
     [&](entity_t entity, SpriteComponent& sprite, TransformComponent& transform) {
        RigidBodyComponent* rb = bodies.try_get(entity);

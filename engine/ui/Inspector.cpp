@@ -15,7 +15,6 @@ namespace engine {
 
 namespace {
 
-// A component field of an unhandled type is a compile error 
 struct InspectVisitor {
   const AssetRegistry& assets;
 
@@ -83,7 +82,6 @@ void DrawInspector(Scene& scene, const AssetRegistry& assets, entity_t& selected
 
   ImGui::Text("%d entities", static_cast<int>(entities.size()));
   if (ImGui::BeginChild("entities", ImVec2(0.0f, 150.0f), true)) {
-    // Clipped so a few thousand entities still cost one screenful of work.
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(entities.size()));
     while (clipper.Step()) {

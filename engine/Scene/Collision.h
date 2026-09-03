@@ -26,6 +26,15 @@ struct AABB {
   glm::vec3 max;
 };
 
+struct Ray {
+  glm::vec3 origin;
+  glm::vec3 direction;
+  glm::vec3 inv_direction;
+  float t_min;
+  float t_max;
+
+};
+
 
 inline Contact Flip(Contact c) {
   c.normal = -c.normal;
