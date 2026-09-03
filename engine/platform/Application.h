@@ -38,7 +38,7 @@ namespace engine {
         float fps_timer_ = 0.0f;
         int frame_count_ = 0;
         int exit_code_ = 0;
-        bool paused_ = false;
+        bool paused_ = true;
         Window window_;
         Renderer renderer_;
         Timer timer_;
@@ -46,6 +46,7 @@ namespace engine {
         Scene scene_;
         AssetRegistry assets_;
         ImGuiLayer imgui_layer_;
+        TaskScheduler task_scheduler_;
 
     };
 }

@@ -34,7 +34,7 @@ namespace engine {
         MeshComponent, CameraComponent, RigidBodyComponent, SpriteComponent,
         ColliderComponent, MovementComponent>;
 
-        Scene();
+        Scene(TaskScheduler& task_scheduler);
         virtual ~Scene();
         Entity CreateEntity();
         void DestroyEntity(Entity& entity);

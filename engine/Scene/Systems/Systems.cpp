@@ -135,12 +135,17 @@ void System::Collision(Scene& scene, float delta_time) {
 
   const float default_restitution = 0.6f;
 
-  // Refresh dynamic proxies to their post-integration positions.
+  // Refresh dynamic proxies to their post-integration positions. The box each
+  // body lands on is kept for the broad-phase query rather than recomputed there.
+  dynamic_entities_.clear();
+  dynamic_boxes_.clear();
   for (auto& [entity, proxy] : dynamic_proxies_) {
     if (!transforms.contains(entity) || !colliders.contains(entity)) continue;
     const TransformComponent& t = transforms.get(entity);
-    proxy = dynamic_tree_.UpdateLeaf(
-        proxy, ComputeAABB(t.position, t.rotation_quat, colliders.get(entity)));
+    const AABB box = ComputeAABB(t.position, t.rotation_quat, colliders.get(entity));
+    proxy = dynamic_tree_.UpdateLeaf(proxy, box);
+    dynamic_entities_.push_back(entity);
+    dynamic_boxes_.push_back(box);
   }
 
   // Resolve a pair's contacts sequentially: each impulse updates the velocities
@@ -214,63 +219,57 @@ void System::Collision(Scene& scene, float delta_time) {
     return total_impulse;
   };
 
-  std::vector<entity_t> dynamic_entities;
-  dynamic_entities.reserve(dynamic_proxies_.size());
-  for (const auto& [entity, proxy] : dynamic_proxies_) {
-    (void)proxy;
-    dynamic_entities.push_back(entity);
+  const std::size_t body_count = dynamic_entities_.size();
+  // Grown, never shrunk, so the inner vectors keep the capacity they reached.
+  if (candidates_.size() < body_count) candidates_.resize(body_count);
+  if (pair_contacts_.size() < body_count) pair_contacts_.resize(body_count);
+  for (std::size_t i = 0; i < body_count; ++i) {
+    candidates_[i].clear();
+    pair_contacts_[i].clear();
   }
 
-  std::vector<entity_t> plane_entities;
-  for (entity_t plane_entity : colliders.dense_entities) {
-    if (HasPlane(colliders.get(plane_entity))) plane_entities.push_back(plane_entity);
-  }
-
-  std::vector<std::vector<entity_t>> candidates(dynamic_entities.size());
-  scene.GetTaskScheduler().parallel_for(0, dynamic_entities.size(), [&](std::size_t i) {
-    const entity_t entity = dynamic_entities[i];
-    if (!transforms.contains(entity) || !colliders.contains(entity)) return;
-    const TransformComponent& t = transforms.get(entity);
-    const AABB box = ComputeAABB(t.position, t.rotation_quat, colliders.get(entity));
+  scene.GetTaskScheduler().parallel_for(0, body_count, [&](std::size_t i) {
+    const entity_t entity = dynamic_entities_[i];
+    const AABB& box = dynamic_boxes_[i];
 
     dynamic_tree_.Query(box, [&](entity_t other) {
-      if (other > entity) candidates[i].push_back(other);
+      if (other > entity) candidates_[i].push_back(other);
     });
     static_tree_.Query(box, [&](entity_t other) {
-      candidates[i].push_back(other);
+      candidates_[i].push_back(other);
     });
   });
 
-  struct PairContact { entity_t a; entity_t b; ContactManifold manifold; };
-  std::vector<std::vector<PairContact>> pair_contacts(dynamic_entities.size());
-  scene.GetTaskScheduler().parallel_for(0, dynamic_entities.size(), [&](std::size_t i) {
-    const entity_t entity = dynamic_entities[i];
-    TransformComponent* te = transforms.try_get(entity);
-    if (!te || !colliders.contains(entity)) return;
+  scene.GetTaskScheduler().parallel_for(0, body_count, [&](std::size_t i) {
+    const entity_t entity = dynamic_entities_[i];
+    const TransformComponent& te = transforms.get(entity);
     const ColliderComponent& ce = colliders.get(entity);
 
-    for (entity_t other : candidates[i]) {
+    for (entity_t other : candidates_[i]) {
       TransformComponent* to = transforms.try_get(other);
       if (!to || !colliders.contains(other)) continue;
       ContactManifold manifold;
-      Collide(te->position, te->rotation_quat, ce,
+      Collide(te.position, te.rotation_quat, ce,
               to->position, to->rotation_quat, colliders.get(other), manifold);
-      if (manifold.count > 0) pair_contacts[i].push_back({entity, other, manifold});
+      if (manifold.count > 0) pair_contacts_[i].push_back({entity, other, manifold});
     }
 
-    for (entity_t plane_entity : plane_entities) {
+    for (entity_t plane_entity : plane_entities_) {
+      if (!colliders.contains(plane_entity)) continue;
+      const ColliderComponent& cp = colliders.get(plane_entity);
+      if (!CouldTouchPlaneCollider(dynamic_boxes_[i], cp)) continue;
       TransformComponent* tp = transforms.try_get(plane_entity);
       const glm::vec3 plane_pos = tp ? tp->position : glm::vec3(0.0f);
       const glm::quat plane_rot_quat = tp ? tp->rotation_quat : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
       ContactManifold manifold;
-      Collide(te->position, te->rotation_quat, ce,
-              plane_pos, plane_rot_quat, colliders.get(plane_entity), manifold);
-      if (manifold.count > 0) pair_contacts[i].push_back({entity, plane_entity, manifold});
+      Collide(te.position, te.rotation_quat, ce,
+              plane_pos, plane_rot_quat, cp, manifold);
+      if (manifold.count > 0) pair_contacts_[i].push_back({entity, plane_entity, manifold});
     }
   });
 
-  for (std::size_t i = 0; i < pair_contacts.size(); ++i) {
-    for (const PairContact& pc : pair_contacts[i]) {
+  for (std::size_t i = 0; i < body_count; ++i) {
+    for (const PairContact& pc : pair_contacts_[i]) {
       resolve(pc.a, pc.b, pc.manifold);
     }
   }

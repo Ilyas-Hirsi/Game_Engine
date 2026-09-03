@@ -2,7 +2,7 @@
 #include "Components/TransformComponent.h"
 #include "../Events/CollisionEvents.h"
 namespace engine {
-    Scene::Scene() {
+    Scene::Scene(TaskScheduler& task_scheduler) : task_scheduler_(task_scheduler) {
 
     }
     Scene::~Scene() {

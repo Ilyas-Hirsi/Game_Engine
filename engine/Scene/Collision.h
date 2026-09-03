@@ -77,7 +77,7 @@ struct ContactManifold {
   const Contact* end()   const { return contacts + count; }
 };
 
-// --- Narrow phase ---------------------------------------------------------
+// Narrow phase
 // `ca` / `cb` are world positions from TransformComponent. Planes are infinite
 // half-spaces defined by normal + offset, so they ignore the transform.
 
@@ -207,15 +207,13 @@ inline Contact CapsulePlane(const glm::vec3& ca, const glm::quat& ra, const Caps
   const glm::vec3 e1 = ca - axis * half;
   const float d0 = glm::dot(p.normal, e0) - p.offset;
   const float d1 = glm::dot(p.normal, e1) - p.offset;
-  // deepest endpoint acts as the sphere; lying flat, both ends are equally
-  // deep and the midpoint gives a stable line-contact stand-in
+
   glm::vec3 deepest = d0 < d1 ? e0 : e1;
   if (std::abs(d0 - d1) < 1e-4f) deepest = ca;
   return SpherePlane(deepest, Sphere{a.radius}, p);
 }
 
-// Closest points between segments p1->q1 and p2->q2 (Ericson, RTCD 5.1.9).
-// Assumes both segments have positive length, which capsule cores always do.
+
 inline void ClosestPointsSegmentSegment(const glm::vec3& p1, const glm::vec3& q1,
                                         const glm::vec3& p2, const glm::vec3& q2,
                                         glm::vec3& c1, glm::vec3& c2) {
@@ -371,8 +369,21 @@ std::visit(
 return aabb;
 }
 
-// Planes are infinite half-spaces, so plane colliders are excluded from the
-// sweep and handled in their own pass (see System::Collision).
+
+inline bool AabbCrossesPlane(const AABB& box, const Plane& p) {
+  const glm::vec3 center = 0.5f * (box.min + box.max);
+  const glm::vec3 half   = 0.5f * (box.max - box.min);
+  return glm::dot(p.normal, center) - glm::dot(glm::abs(p.normal), half) <= p.offset;
+}
+
+inline bool CouldTouchPlaneCollider(const AABB& box, const ColliderComponent& col) {
+  for (const ChildShape& child : col.child_shapes) {
+    const Plane* plane = std::get_if<Plane>(&child.shape);
+    if (!plane || AabbCrossesPlane(box, *plane)) return true;
+  }
+  return false;
+}
+
 inline bool HasPlane(const ColliderComponent& col) {
   for (const ChildShape& child : col.child_shapes)
     if (std::holds_alternative<Plane>(child.shape)) return true;

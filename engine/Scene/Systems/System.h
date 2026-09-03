@@ -23,12 +23,19 @@ class System {
    void Render(Scene& scene, Renderer& renderer, float alpha = 0.0f);
    void UpdateCamera(Scene& scene, Renderer& renderer);
   private:
+   struct PairContact { entity_t a; entity_t b; ContactManifold manifold; };
+
    std::unordered_map<std::uint64_t, std::vector<glm::mat4>> batches;
    BVHTree dynamic_tree_;
    BVHTree static_tree_;
    std::unordered_map<entity_t, int> dynamic_proxies_;
    std::unordered_map<entity_t, int> static_proxies_;
    std::vector<entity_t> plane_entities_;
+
+   std::vector<entity_t> dynamic_entities_;
+   std::vector<AABB> dynamic_boxes_;
+   std::vector<std::vector<entity_t>> candidates_;
+   std::vector<std::vector<PairContact>> pair_contacts_;
 };
 
 
