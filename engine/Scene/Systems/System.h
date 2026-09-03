@@ -17,6 +17,8 @@ class System {
    void Update(Scene& scene, float delta_time);
    void FixedUpdate(Scene& scene, float fixed_dt);
    void Collision(Scene& scene, float delta_time);
+   void SyncColliderProxies(Scene& scene);
+   RayHit Raycast(Scene& scene, const Ray& query);
    void HandleInput(Scene& scene, Input& input, float delta_time);
    void Render(Scene& scene, Renderer& renderer, float alpha = 0.0f);
    void UpdateCamera(Scene& scene, Renderer& renderer);
@@ -26,6 +28,7 @@ class System {
    BVHTree static_tree_;
    std::unordered_map<entity_t, int> dynamic_proxies_;
    std::unordered_map<entity_t, int> static_proxies_;
+   std::vector<entity_t> plane_entities_;
 };
 
 

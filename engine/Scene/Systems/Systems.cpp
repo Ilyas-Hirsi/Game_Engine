@@ -84,14 +84,10 @@ void System::FixedUpdate(Scene& scene, float fixed_dt) {
         });
 }
 
-void System::Collision(Scene& scene, float delta_time) {
-  (void)delta_time;
 
+void System::SyncColliderProxies(Scene& scene) {
   auto& colliders = scene.pool<ColliderComponent>();
   auto& transforms = scene.pool<TransformComponent>();
-  auto& rigid_bodies = scene.pool<RigidBodyComponent>();
-
-  const float default_restitution = 0.6f;
 
   // Apply queued removals, then insertions, before any query.
   for (entity_t entity : scene.GetCollidersToDestroy()) {
@@ -105,14 +101,20 @@ void System::Collision(Scene& scene, float delta_time) {
     if (s != static_proxies_.end()) {
       static_tree_.RemoveLeaf(s->second);
       static_proxies_.erase(s);
+      continue;
     }
+    auto p = std::find(plane_entities_.begin(), plane_entities_.end(), entity);
+    if (p != plane_entities_.end()) plane_entities_.erase(p);
   }
   scene.GetCollidersToDestroy().clear();
 
   for (entity_t entity : scene.GetCollidersToCreate()) {
     if (!colliders.contains(entity) || !transforms.contains(entity)) continue;
     const ColliderComponent& collider = colliders.get(entity);
-    if (HasPlane(collider)) continue;  // planes never enter the trees
+    if (HasPlane(collider)) {
+      plane_entities_.push_back(entity);
+      continue;
+    }
     const TransformComponent& t = transforms.get(entity);
     const AABB box = ComputeAABB(t.position, t.rotation_quat, collider);
     if (collider.is_static) {
@@ -122,6 +124,16 @@ void System::Collision(Scene& scene, float delta_time) {
     }
   }
   scene.GetCollidersToCreate().clear();
+}
+
+void System::Collision(Scene& scene, float delta_time) {
+  (void)delta_time;
+
+  auto& colliders = scene.pool<ColliderComponent>();
+  auto& transforms = scene.pool<TransformComponent>();
+  auto& rigid_bodies = scene.pool<RigidBodyComponent>();
+
+  const float default_restitution = 0.6f;
 
   // Refresh dynamic proxies to their post-integration positions.
   for (auto& [entity, proxy] : dynamic_proxies_) {
@@ -359,6 +371,33 @@ void System::Render(Scene& scene, Renderer& renderer, float alpha) {
   batches.reserve(batches.size());
   batches.clear();
   
+}
+
+RayHit System::Raycast(Scene& scene, const Ray& query) {
+  RayHit hit;
+  Ray ray = query;
+
+  auto consider = [&](entity_t entity, float t) {
+    if (t >= hit.t) return;
+    hit.t = t;
+    hit.entity = entity;
+    ray.t_max = t;
+  };
+
+  static_tree_.Query(ray, consider);
+  dynamic_tree_.Query(ray, consider);
+
+  auto& colliders = scene.pool<ColliderComponent>();
+  for (entity_t entity : plane_entities_) {
+    if (!colliders.contains(entity)) continue;
+    for (const ChildShape& child : colliders.get(entity).child_shapes) {
+      if (const Plane* plane = std::get_if<Plane>(&child.shape)) {
+        float t;
+        if (RayPlane(ray, *plane, t)) consider(entity, t);
+      }
+    }
+  }
+  return hit;
 }
 
 }  // namespace engine

@@ -7,9 +7,11 @@
 #include "Scene/Components/TransformComponent.h"
 #include "core/Log.h"
 #include "platform/MeshFactory.h"
+#include "Scene/Camera.h"
 #include "ui/Inspector.h"
 
 #include <imgui.h>
+#include <limits>
 #include <random>
 
 // Arena is a +/-kHalf box. The floor sits at y = -kHalf; four invisible
@@ -203,10 +205,28 @@ class Sandbox : public engine::Application {
         "WASD/arrows move the camera.");
   }
 
+  void OnUpdate(float delta_time) override {
+    Application::OnUpdate(delta_time);
+    if (!IsPaused()) return;
+    if (!GetInput().WasMouseButtonPressed(MouseButton::Left)) return;
+
+    auto matrices = GetScene().ActiveCameraMatrices(GetRenderer().GetAspectRatio());
+    if (!matrices) return;
+
+    const engine::Ray ray = engine::ScreenPointToRay(
+        *matrices, GetInput().MouseX(), GetInput().MouseY(),
+        GetWindow().Width(), GetWindow().Height());
+
+    const engine::RayHit hit = GetScene().Raycast(ray);
+    selected_ = hit.Hit() ? hit.entity : kNoSelection;
+  }
+
   void OnImGui() override {
     ImGui::Begin("Engine");
     const ImGuiIO& io = ImGui::GetIO();
     ImGui::Text("%.1f FPS (%.2f ms)", io.Framerate, 1000.0f / io.Framerate);
+    bool paused = IsPaused();
+    if (ImGui::Checkbox("Paused (click to select)", &paused)) SetPaused(paused);
     // Writes straight into the live PhysicsSettings the fixed step reads.
     ImGui::DragFloat3("Gravity", &GetScene().GetPhysicsSettings().gravity.x, 0.5f);
     ImGui::End();
@@ -215,7 +235,9 @@ class Sandbox : public engine::Application {
   }
 
  private:
-  entity_t selected_ = 0;
+  // Entity 0 is a real entity, so "nothing picked" needs an id that never is.
+  static constexpr entity_t kNoSelection = std::numeric_limits<entity_t>::max();
+  entity_t selected_ = kNoSelection;
 };
 
 int main(int argc, char* argv[]) {

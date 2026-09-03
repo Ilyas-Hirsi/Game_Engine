@@ -27,6 +27,8 @@ namespace engine {
         Scene& GetScene();
         Input& GetInput();
         AssetRegistry& GetAssets();
+        bool IsPaused() const { return paused_; }
+        void SetPaused(bool paused) { paused_ = paused; }
         Application(const Application&) = delete;
         Application& operator=(const Application&) = delete;
         private:
@@ -36,6 +38,7 @@ namespace engine {
         float fps_timer_ = 0.0f;
         int frame_count_ = 0;
         int exit_code_ = 0;
+        bool paused_ = false;
         Window window_;
         Renderer renderer_;
         Timer timer_;

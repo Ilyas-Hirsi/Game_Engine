@@ -179,6 +179,23 @@ struct BVHNode {
       }
     }
 
+    template <typename Fn>
+    void Query(Ray& ray, Fn&& fn) const {
+      if (root == -1) return;
+      static thread_local std::vector<int> stack;
+      stack.clear();
+      stack.push_back(root);
+      while (!stack.empty()){
+        const int index = stack.back();
+        stack.pop_back();
+        const BVHNode& node = nodes[index];
+        float t_entry;
+        if (!RayAABB(ray, node.box, t_entry)) continue;
+        if (IsLeaf(node)) fn(node.entity, t_entry);
+        else { stack.push_back(node.left); stack.push_back(node.right); }
+      }
+    }
+
     bool Empty() const { return root == -1; }
     int Height() const { return root == -1 ? 0 : nodes[root].height; }
     void Clear(){ nodes.clear(); free_list.clear(); root = -1; }

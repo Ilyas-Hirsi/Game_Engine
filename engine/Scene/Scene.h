@@ -25,11 +25,7 @@ namespace engine {
         float fixed_dt = 1.0f / 60.0f;
         float restitution = 0.2f;
     };
-    struct RayHit {
-        entity_t entity = 0;
-        float t = FLT_MAX;
-        bool Hit() const { return t < FLT_MAX; }
-      };
+
 
     class Scene {
 
@@ -50,6 +46,7 @@ namespace engine {
         void Update(float deltaTime);
         void FixedUpdate(float fixed_dt);
         void Render(Renderer& renderer, float alpha = 0.0f);
+        RayHit Raycast(const Ray& ray);
         // Empty when no camera is marked active.
         std::optional<CameraMatrices> ActiveCameraMatrices(float aspect);
         PhysicsSettings& GetPhysicsSettings() {return physics_settings_;};

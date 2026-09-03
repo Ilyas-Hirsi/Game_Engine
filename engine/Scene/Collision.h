@@ -7,7 +7,9 @@
 #include <variant>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <cfloat>
 #include "Components/ColliderComponent.h"
+#include "Entity.h"
 
 namespace engine {
 
@@ -33,6 +35,11 @@ struct Ray {
   float t_min;
   float t_max;
 
+};
+struct RayHit {
+  entity_t entity = 0;
+  float t = FLT_MAX;
+  bool Hit() const { return t < FLT_MAX; }
 };
 
 
@@ -370,6 +377,30 @@ inline bool HasPlane(const ColliderComponent& col) {
   for (const ChildShape& child : col.child_shapes)
     if (std::holds_alternative<Plane>(child.shape)) return true;
   return false;
+}
+
+inline bool RayAABB(const Ray& ray, const AABB& aabb, float& t_entry) {
+  // checks if ray collides, may mutate ray.t_min and ray.t_max
+  const glm::vec3 t1 = (aabb.min - ray.origin) * ray.inv_direction;
+  const glm::vec3 t2 = (aabb.max - ray.origin) * ray.inv_direction;
+  const glm::vec3 lo = glm::min(t1, t2);
+  const glm::vec3 hi = glm::max(t1, t2);
+
+  const float t_min = std::max(std::max(lo.x, lo.y), std::max(lo.z, ray.t_min));
+  const float t_max = std::min(std::min(hi.x, hi.y), std::min(hi.z, ray.t_max));
+  if (t_min > t_max) return false;
+
+  t_entry = t_min;
+  return true;
+}
+
+inline bool RayPlane(const Ray& ray, const Plane& plane, float& t_out) {
+  const float denom = glm::dot(plane.normal, ray.direction);
+  if (std::abs(denom) < 1e-6f) return false;  // parallel
+  const float t = (plane.offset - glm::dot(plane.normal, ray.origin)) / denom;
+  if (t < ray.t_min || t > ray.t_max) return false;
+  t_out = t;
+  return true;
 }
 
 }  // namespace engine

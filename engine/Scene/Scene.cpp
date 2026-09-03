@@ -28,6 +28,10 @@ namespace engine {
 
     const EntityStorage& Scene::GetEntities() const { return entities_; }
     
+    RayHit Scene::Raycast(const Ray& ray) {
+        return system_.Raycast(*this, ray);
+    }
+    
 
     void Scene::HandleInput(Input& input, float deltaTime) {
         system_.HandleInput(*this, input, deltaTime);
@@ -35,6 +39,9 @@ namespace engine {
 
     void Scene::Update(float deltaTime) {
         OnUpdate(deltaTime);
+        // After OnUpdate so colliders created this frame reach the trees before
+        // FixedUpdate queries them; runs every frame, so pausing cannot stall it.
+        system_.SyncColliderProxies(*this);
     }
     void Scene::FixedUpdate(float fixed_dt) {
         system_.FixedUpdate(*this, fixed_dt);

@@ -44,16 +44,20 @@ int Application::Run() {
         const float delta_time = timer_.Tick();
         // Clamp so a stall can't break fixed update.
         const float frame_dt = std::min(delta_time, 0.25f);
-        accumulator += frame_dt;
+        if (!paused_) {
+            accumulator += frame_dt;
+            while (accumulator >= fixed_dt) {
+                scene_.FixedUpdate(fixed_dt); 
+                accumulator -= fixed_dt;
+            }
+        }
+        // Paused frames render the unlerped transform, which is the one the
+        // BVH holds, so a picking ray hits what is actually drawn.
+        const float alpha = paused_ ? 1.0f : 
+                            (fixed_dt > 0.0f ? accumulator / fixed_dt : 0.0f);
 
         window_.PollEvents(input_);
         OnUpdate(frame_dt);
-
-        while (accumulator >= fixed_dt) {
-            scene_.FixedUpdate(fixed_dt);
-            accumulator -= fixed_dt;
-        }
-        const float alpha = fixed_dt > 0.0f ? accumulator / fixed_dt : 0.0f;
 
         renderer_.BeginFrame();
         scene_.Render(renderer_, alpha);
