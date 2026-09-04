@@ -247,11 +247,24 @@ void Renderer::Shutdown() {
     mesh_shader_program_ = 0;
   }
 
+  for (Mesh& mesh : meshes_) {
+    if (mesh.vao == 0) continue;
+    glDeleteVertexArrays(1, &mesh.vao);
+    glDeleteBuffers(1, &mesh.vbo);
+    glDeleteBuffers(1, &mesh.ebo);
+  }
+  meshes_.clear();
+
+  for (unsigned int& texture : textures_) {
+    if (texture == 0) continue;
+    glDeleteTextures(1, &texture);
+  }
+  textures_.clear();
+
   if (gl_context_ != nullptr) {
     SDL_GL_DeleteContext(gl_context_);
     gl_context_ = nullptr;
   }
-  texture_cache_.clear();
 
   if (image_initialized_) {
     IMG_Quit();
@@ -270,11 +283,6 @@ void Renderer::SetClearColor(std::uint8_t r, std::uint8_t g, std::uint8_t b,
 }
 
 TextureHandle Renderer::LoadTexture(const std::string& texture_path) {
-  const auto existing = texture_cache_.find(texture_path);
-  if (existing != texture_cache_.end()) {
-    return existing->second;
-  }
-
   if (gl_context_ == nullptr) {
     return {};
   }
@@ -306,9 +314,7 @@ TextureHandle Renderer::LoadTexture(const std::string& texture_path) {
   SDL_FreeSurface(formatted_surface);
 
   textures_.push_back(texture);
-  TextureHandle handle{static_cast<std::uint32_t>(textures_.size())};
-  texture_cache_[texture_path] = handle;
-  return handle;
+  return TextureHandle{static_cast<std::uint32_t>(textures_.size())};
 }
 
 void Renderer::CalculateMeshBounds(const MeshData& mesh_data, Mesh& mesh){
@@ -358,6 +364,15 @@ meshes_.emplace_back(mesh);
 return MeshHandle{static_cast<std::uint32_t>(meshes_.size())};  // 1-based, like textures
 }
 
+void Renderer::DestroyMesh(MeshHandle mesh) {
+  if (!mesh.IsValid() || mesh.id > meshes_.size()) return;
+  Mesh& m = meshes_[mesh.id - 1];
+  if (m.vao == 0) return;
+  glDeleteVertexArrays(1, &m.vao);
+  glDeleteBuffers(1, &m.vbo);
+  glDeleteBuffers(1, &m.ebo);
+  m = Mesh{};
+}
 void Renderer::BeginFrame() {
   glClearColor(clear_r_/255.0f, clear_g_/255.0f, clear_b_/255.0f, clear_a_/255.0f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -372,9 +387,9 @@ void Renderer::EndFrame() {
 }
 
 void Renderer::DrawSprite(TextureHandle texture, float x, float y, int width, int height) {
+  const unsigned int gl_texture = ResolveTexture(texture);
   if (gl_context_ == nullptr || shader_program_ == 0 || vertex_array_ == 0 ||
-      !texture.IsValid() || texture.id > textures_.size() ||
-      viewport_width_ <= 0 || viewport_height_ <= 0) {
+      gl_texture == 0 || viewport_width_ <= 0 || viewport_height_ <= 0) {
     return;
   }
 
@@ -398,7 +413,7 @@ void Renderer::DrawSprite(TextureHandle texture, float x, float y, int width, in
 
   glUseProgram(shader_program_);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, textures_[texture.id - 1]);
+  glBindTexture(GL_TEXTURE_2D, gl_texture);
 
   glBindVertexArray(vertex_array_);
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
@@ -428,7 +443,7 @@ void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture, const glm::mat4&
 }
 
 
- MeshHandle Renderer::CreateMesh(const MeshData& mesh_data) {
+Mesh Renderer::BuildMesh(const MeshData& mesh_data) {
   Mesh mesh;
   mesh.index_count = static_cast<int>(mesh_data.indices.size());
   glGenVertexArrays(1, &mesh.vao);
@@ -469,38 +484,73 @@ void Renderer::DrawMesh(MeshHandle mesh, TextureHandle texture, const glm::mat4&
   }
   CalculateMeshBounds(mesh_data, mesh);
   glBindVertexArray(0);
-  meshes_.emplace_back(mesh);
+  return mesh;
+}
+
+MeshHandle Renderer::CreateMesh(const MeshData& mesh_data) {
+  meshes_.push_back(BuildMesh(mesh_data));
   return MeshHandle{static_cast<std::uint32_t>(meshes_.size())};
+}
+
+bool Renderer::ReplaceMesh(MeshHandle handle, const MeshData& mesh_data) {
+  if (!handle.IsValid() || handle.id > meshes_.size()) return false;
+  Mesh& slot = meshes_[handle.id - 1];
+  if (slot.vao != 0) {
+    glDeleteVertexArrays(1, &slot.vao);
+    glDeleteBuffers(1, &slot.vbo);
+    glDeleteBuffers(1, &slot.ebo);
   }
+  slot = BuildMesh(mesh_data);
+  return true;
+}
+
+void Renderer::DestroyTexture(TextureHandle handle) {
+  if (!handle.IsValid() || handle.id > textures_.size()) return;
+  unsigned int& slot = textures_[handle.id - 1];
+  if (slot == 0) return;
+  glDeleteTextures(1, &slot);
+  slot = 0;
+}
+
+const Mesh* Renderer::ResolveMesh(MeshHandle handle) const {
+  if (!handle.IsValid() || handle.id > meshes_.size()) return nullptr;
+  const Mesh& mesh = meshes_[handle.id - 1];
+  return mesh.vao == 0 ? nullptr : &mesh;
+}
+
+unsigned int Renderer::ResolveTexture(TextureHandle handle) const {
+  if (!handle.IsValid() || handle.id > textures_.size()) return 0;
+  return textures_[handle.id - 1];
+}
 
   void Renderer::DrawMeshInstanced(MeshHandle mesh, TextureHandle texture, const std::vector<glm::mat4>& models){
-    if (models.empty() || !mesh.IsValid() || mesh.id > meshes_.size()) return;
-    const Mesh& m = meshes_[mesh.id - 1];
+    const Mesh* m = ResolveMesh(mesh);
+    if (models.empty() || m == nullptr) return;
     glUseProgram(mesh_shader_program_);
     const glm::mat4 view_proj = projection_matrix_ * view_matrix_;
     glUniformMatrix4fv(u_viewproj_loc_, 1, GL_FALSE, glm::value_ptr(view_proj));
   
-    const bool use_texture = texture.IsValid() && texture.id <= textures_.size();
-    glUniform1i(u_use_texture_loc_, use_texture ? 1 : 0);
-    if (use_texture) {
+    const unsigned int gl_texture = ResolveTexture(texture);
+    glUniform1i(u_use_texture_loc_, gl_texture != 0 ? 1 : 0);
+    if (gl_texture != 0) {
       glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, textures_[texture.id - 1]);
+      glBindTexture(GL_TEXTURE_2D, gl_texture);
     }
   
     glBindBuffer(GL_ARRAY_BUFFER, instance_vbo_);
     glBufferData(GL_ARRAY_BUFFER, models.size() * sizeof(glm::mat4),
                  models.data(), GL_DYNAMIC_DRAW);
-    glBindVertexArray(m.vao);
-    glDrawElementsInstanced(GL_TRIANGLES, m.index_count,
+    glBindVertexArray(m->vao);
+    glDrawElementsInstanced(GL_TRIANGLES, m->index_count,
                             GL_UNSIGNED_INT, nullptr,
                             static_cast<GLsizei>(models.size()));
     glBindVertexArray(0);
   }
   bool Renderer::GetMeshBounds(MeshHandle mesh, glm::vec3& out_min, glm::vec3& out_max) const {
-    if (!mesh.IsValid() || mesh.id > meshes_.size()) return false;
-    const Mesh& m = meshes_[mesh.id - 1];
-    out_min = m.bounds_min;
-    out_max = m.bounds_max;
+    const Mesh* m = ResolveMesh(mesh);
+    if (m == nullptr) return false;
+    out_min = m->bounds_min;
+    out_max = m->bounds_max;
     return true;
   }
   const glm::mat4& Renderer::GetViewMatrix() const { return view_matrix_; }

@@ -26,8 +26,13 @@ struct InspectVisitor {
   void operator()(const char* name, glm::vec3& v) const {
     ImGui::DragFloat3(name, &v.x, 0.05f);
   }
+  void operator()(const char* name, std::string& v) const {
+    char buffer[128];
+  std::snprintf(buffer, sizeof(buffer), "%s", v.c_str());
+  if (ImGui::InputText(name, buffer, sizeof(buffer))) v = buffer;
+  }
 
-  // Edited as degrees so the widget is usable; the quaternion stays normalized.
+  // Edited as degrees
   void operator()(const char* name, glm::quat& v) const {
     glm::vec3 euler = glm::degrees(glm::eulerAngles(v));
     if (ImGui::DragFloat3(name, &euler.x, 0.5f)) {
@@ -76,26 +81,6 @@ void InspectAll(Scene& scene, entity_t entity, const AssetRegistry& assets,
 
 void DrawInspector(Scene& scene, const AssetRegistry& assets, entity_t& selected) {
   ImGui::Begin("Inspector");
-
-  const std::vector<entity_t>& entities =
-      scene.pool<TransformComponent>().dense_entities;
-
-  ImGui::Text("%d entities", static_cast<int>(entities.size()));
-  if (ImGui::BeginChild("entities", ImVec2(0.0f, 150.0f), true)) {
-    ImGuiListClipper clipper;
-    clipper.Begin(static_cast<int>(entities.size()));
-    while (clipper.Step()) {
-      for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
-        const entity_t entity = entities[i];
-        char label[32];
-        std::snprintf(label, sizeof(label), "Entity %u", index_of(entity));
-        if (ImGui::Selectable(label, entity == selected)) selected = entity;
-      }
-    }
-  }
-  ImGui::EndChild();
-
-  ImGui::Separator();
 
   if (scene.GetEntities().valid(selected)) {
     InspectAll(scene, selected, assets,

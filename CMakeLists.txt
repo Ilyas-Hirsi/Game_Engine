@@ -89,6 +89,7 @@ add_subdirectory(engine)
 
 add_executable(Game_Engine
   sandbox/main.cc
+  sandbox/DemoScene.cpp
 )
 target_link_libraries(Game_Engine PRIVATE EngineCore)
 target_compile_definitions(Game_Engine PRIVATE

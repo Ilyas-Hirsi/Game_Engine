@@ -16,6 +16,7 @@
 #include "Components/TextureComponent.h"
 #include "Components/SpriteComponent.h"
 #include "Components/ColliderComponent.h"
+#include "Components/NameComponent.h"
 #include "../Events/EventBus.h"
 #include "../core/TaskScheduler.h"
 namespace engine {
@@ -32,12 +33,12 @@ namespace engine {
         public:
         using Registry = ECSRegistry<InputComponent, TransformComponent, TextureComponent,
         MeshComponent, CameraComponent, RigidBodyComponent, SpriteComponent,
-        ColliderComponent, MovementComponent>;
+        ColliderComponent, MovementComponent, NameComponent>;
 
         Scene(TaskScheduler& task_scheduler);
         virtual ~Scene();
-        Entity CreateEntity();
-        void DestroyEntity(Entity& entity);
+        Entity CreateEntity(std::string name = {});
+        void DestroyEntity(Entity entity);
         System& GetSystem();
         EventBus& GetEventBus();
         EntityStorage& GetEntities();
@@ -62,6 +63,13 @@ namespace engine {
             return registry_.emplace<T>(ent, std::forward<Args>(args)...);
         }
         template <typename T>
+        void remove(const Entity& ent) {
+            if constexpr (std::is_same_v<T, ColliderComponent>) {
+                if (registry_.has<T>(ent)) colliders_to_destroy.push_back(ent.GetId());
+            }
+            registry_.remove<T>(ent);
+        }
+        template <typename T>
         SparseSet<T>& pool(){
             return registry_.pool<T>();
         }
@@ -83,13 +91,12 @@ namespace engine {
 
         private:
         System system_;
-        std::uint32_t next_entity_id_ = 0;
         EntityStorage entities_;
         Registry registry_;
         PhysicsSettings physics_settings_;
         EventBus event_bus_;
         std::vector<entity_t> colliders_to_create;
         std::vector<entity_t> colliders_to_destroy;
-        TaskScheduler task_scheduler_;
+        TaskScheduler& task_scheduler_;
     };
 }

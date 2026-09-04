@@ -33,6 +33,7 @@ class Renderer {
   TextureHandle LoadTexture(const std::string& texture_path);
   MeshHandle CreateMesh(const std::vector<float>& vertices,
     const std::vector<unsigned int>& indices);
+  void DestroyMesh(MeshHandle mesh);
 
   void BeginFrame();
   void EndFrame();
@@ -42,6 +43,8 @@ class Renderer {
   void CalculateMeshBounds(const MeshData& mesh_data, Mesh& mesh);
   void CalculateMeshBounds(const std::vector<float>& vertices, int stride, Mesh& mesh);
   MeshHandle CreateMesh(const MeshData& mesh_data);
+  bool ReplaceMesh(MeshHandle handle, const MeshData& mesh_data);
+  void DestroyTexture(TextureHandle handle);
 
 
   bool GetMeshBounds(MeshHandle mesh, glm::vec3& out_min, glm::vec3& out_max) const;
@@ -53,11 +56,14 @@ class Renderer {
   const glm::mat4& GetProjectionMatrix() const;
   glm::mat4 GetViewProjectionMatrix() const;
  private:
+  Mesh BuildMesh(const MeshData& mesh_data);
+  const Mesh* ResolveMesh(MeshHandle handle) const;
+  unsigned int ResolveTexture(TextureHandle handle) const;
+
   SDL_GLContext gl_context_ = nullptr;
   bool image_initialized_ = false;
   std::vector<unsigned int> textures_;
   std::vector<Mesh> meshes_;
-  std::unordered_map<std::string, TextureHandle> texture_cache_;
   SDL_Window* window_ = nullptr;
   unsigned int shader_program_ = 0;
   unsigned int mesh_shader_program_ = 0;

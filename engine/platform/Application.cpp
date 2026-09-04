@@ -8,7 +8,8 @@
 namespace engine {
 
 Application::Application(const std::string& name, int width, int height)
-    : window_(name, width, height), renderer_(), timer_(), assets_(renderer_) {
+    : window_(name, width, height), renderer_(), timer_(), assets_(renderer_), 
+    task_scheduler_(), scene_(task_scheduler_) {
     InitializeEngine();
 }
 
@@ -51,13 +52,13 @@ int Application::Run() {
                 accumulator -= fixed_dt;
             }
         }
-        // Paused frames render the unlerped transform, which is the one the
-        // BVH holds, so a picking ray hits what is actually drawn.
+        // Account for paused frames rendering the unlerped transform
         const float alpha = paused_ ? 1.0f : 
                             (fixed_dt > 0.0f ? accumulator / fixed_dt : 0.0f);
 
         window_.PollEvents(input_);
         OnUpdate(frame_dt);
+        if (paused_) editor_.HandlePicking(scene_, input_, renderer_, window_);
 
         renderer_.BeginFrame();
         scene_.Render(renderer_, alpha);
@@ -65,6 +66,7 @@ int Application::Run() {
 
         // UI last so it overlays the scene
         imgui_layer_.BeginFrame();
+        editor_.Draw(scene_, assets_, paused_);
         OnImGui();
         imgui_layer_.EndFrame();
 

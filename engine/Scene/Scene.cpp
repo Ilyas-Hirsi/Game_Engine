@@ -8,10 +8,12 @@ namespace engine {
     Scene::~Scene() {
     }
 
-    Entity Scene::CreateEntity() {
-        return Entity(entities_.create());
+    Entity Scene::CreateEntity(std::string name) {
+        Entity entity = Entity(entities_.create());
+        emplace<NameComponent>(entity, name);
+        return entity;
     }
-    void Scene::DestroyEntity(Entity& entity) {
+    void Scene::DestroyEntity(Entity entity) {
         if (!entities_.valid(entity.GetId())) return;
         uint32_t id = entity.GetId();
         if (pool<ColliderComponent>().contains(id))

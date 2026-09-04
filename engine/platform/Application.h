@@ -4,6 +4,7 @@
 #include "../core/Timer.h"
 #include "../Scene/Scene.h"
 #include "../Scene/Systems/System.h"
+#include "../ui/EditorLayer.h"
 #include "../ui/ImGuiLayer.h"
 #include "../assets/AssetRegistry.h"
 #include <string>
@@ -41,12 +42,13 @@ namespace engine {
         bool paused_ = true;
         Window window_;
         Renderer renderer_;
+        TaskScheduler task_scheduler_;
         Timer timer_;
         Input input_;
         Scene scene_;
         AssetRegistry assets_;
         ImGuiLayer imgui_layer_;
-        TaskScheduler task_scheduler_;
+        EditorLayer editor_;
 
     };
 }

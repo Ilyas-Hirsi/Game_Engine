@@ -4,15 +4,24 @@
 #include "ColliderComponent.h"
 #include "InputComponent.h"
 #include "MeshComponent.h"
+#include "NameComponent.h"
 #include "PhysicsComponent.h"
 #include "SpriteComponent.h"
 #include "TextureComponent.h"
 #include "TransformComponent.h"
+#include "NameComponent.h"
 
 namespace engine {
 
 
 template <class T> struct Reflect;
+
+template <> struct Reflect<NameComponent> {
+  static constexpr const char* kName = "Name";
+  template <class C, class V> static void Fields(C& c, V&& visit) {
+    visit("name", c.name);
+  }
+};
 
 template <> struct Reflect<TransformComponent> {
   static constexpr const char* kName = "Transform";

@@ -58,6 +58,39 @@ TextureHandle AssetRegistry::Texture(const std::string& id) {
   return handle;
 }
 
+void AssetRegistry::UnloadMesh(const std::string& id) {
+  const auto found = meshes_.find(id);
+  if (found == meshes_.end()) return;
+  renderer_.DestroyMesh(found->second);
+  mesh_names_.erase(found->second.id);
+  meshes_.erase(found);
+}
+
+void AssetRegistry::UnloadTexture(const std::string& id) {
+  const auto found = textures_.find(id);
+  if (found == textures_.end()) return;
+  renderer_.DestroyTexture(found->second);
+  texture_names_.erase(found->second.id);
+  textures_.erase(found);
+}
+
+bool AssetRegistry::ReloadMesh(const std::string& id) {
+  const auto found = meshes_.find(id);
+  if (found == meshes_.end()) return false;
+
+  const auto builder = mesh_builders_.find(id);
+  if (builder == mesh_builders_.end()) {
+    LogError("No mesh builder registered under id: " + id);
+    return false;
+  }
+
+  if (!renderer_.ReplaceMesh(found->second, builder->second())) {
+    LogError("Failed to rebuild mesh: " + id);
+    return false;
+  }
+  return true;
+}
+
 const std::string& AssetRegistry::MeshName(MeshHandle handle) const {
   const auto found = mesh_names_.find(handle.id);
   return found == mesh_names_.end() ? kNoName : found->second;

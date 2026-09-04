@@ -29,6 +29,7 @@ template <class T> struct SparseSet {
     }
 
     T& emplace(entity_t e, T v) {
+        ENGINE_ASSERT(!contains(e), "component already present on entity");
         if (index_of(e) >= sparse.size()) sparse.resize(index_of(e) + 1, NONE);
         sparse[index_of(e)] = static_cast<uint32_t>(dense.size());
         dense_entities.push_back(e);
@@ -37,6 +38,7 @@ template <class T> struct SparseSet {
     }
 
     void remove(entity_t e) {
+        ENGINE_ASSERT(contains(e), "component not present on entity");
         uint32_t index = sparse[index_of(e)];
         uint32_t last  = static_cast<uint32_t>(dense.size() - 1);
 

@@ -26,6 +26,12 @@ class AssetRegistry {
   MeshHandle Mesh(const std::string& id);
   TextureHandle Texture(const std::string& id);
 
+  void UnloadMesh(const std::string& id);
+  void UnloadTexture(const std::string& id);
+
+  // Rebuilds in place, so handles already stored in components stay valid.
+  bool ReloadMesh(const std::string& id);
+
   // Empty when handle did not come from registry
   const std::string& MeshName(MeshHandle handle) const;
   const std::string& TextureName(TextureHandle handle) const;

@@ -26,6 +26,9 @@ add_library(EngineCore STATIC
   core/TaskScheduler.cpp
   platform/Application.cpp
   ui/Inspector.cpp
+  ui/Hierarchy.cpp
+  ui/EditorLayer.cpp
+  ui/Hierarchy.cpp
 )
 target_include_directories(EngineCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(EngineCore PUBLIC EnginePlatform)

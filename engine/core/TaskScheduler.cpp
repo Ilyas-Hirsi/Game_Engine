@@ -54,4 +54,9 @@ namespace engine {
 
         }
     }
+
+    void TaskScheduler::emptyQueue(){
+        std::lock_guard<std::mutex> lock(tasks_mutex);
+        tasks  = {};
+    }
 }

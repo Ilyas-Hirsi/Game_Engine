@@ -13,7 +13,9 @@ namespace engine {
         TaskScheduler();
         ~TaskScheduler();
         void addTask(std::function<void()>);
-        std::atomic<int> task_count;
+        TaskScheduler& operator=(const TaskScheduler&) = delete;
+        TaskScheduler(const TaskScheduler&) = delete;
+        std::atomic<int> task_count{0};
         void stop();
         template <typename Func>
         void parallel_for(std::size_t begin, std::size_t end, Func&& func, std::size_t chunk_size = 0){
@@ -44,6 +46,7 @@ namespace engine {
             }
         }
 
+        void emptyQueue();
         private:
         void workerThread();
         bool running;
