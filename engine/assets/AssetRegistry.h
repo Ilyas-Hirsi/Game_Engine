@@ -35,6 +35,10 @@ class AssetRegistry {
   // Empty when handle did not come from registry
   const std::string& MeshName(MeshHandle handle) const;
   const std::string& TextureName(TextureHandle handle) const;
+  const std::unordered_map<std::string, MeshHandle>& GetMeshes() const;
+  const std::unordered_map<std::string, TextureHandle>& GetTextures() const;
+
+  const std::string& Root() const { return asset_root_; }
 
  private:
   std::string ResolvePath(const std::string& id) const;

@@ -10,6 +10,7 @@ target_include_directories(EnginePlatform PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/platform
 )
 target_link_libraries(EnginePlatform PUBLIC
+  ImGuiFileDialog
   SDL2::SDL2
   SDL2_image::SDL2_image
   glad
@@ -28,9 +29,10 @@ add_library(EngineCore STATIC
   ui/Inspector.cpp
   ui/Hierarchy.cpp
   ui/EditorLayer.cpp
-  ui/Hierarchy.cpp
+  ui/AssetBrowser.cpp
 )
 target_include_directories(EngineCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(EngineCore PRIVATE GAME_ENGINE_ROOT="${CMAKE_SOURCE_DIR}")
 target_link_libraries(EngineCore PUBLIC EnginePlatform)
 
 add_library(Engine::Core ALIAS EngineCore)

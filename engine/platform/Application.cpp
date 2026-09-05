@@ -5,10 +5,22 @@
 
 #include "../core/Log.h"
 
+namespace {
+// Dev builds read and write the source tree so imported assets survive
+// a rebuild
+std::string DefaultAssetRoot() {
+#ifdef GAME_ENGINE_ROOT
+  return std::string(GAME_ENGINE_ROOT) + "/projects/dev/assets";
+#else
+  return "assets";
+#endif
+}
+}  // namespace
+
 namespace engine {
 
 Application::Application(const std::string& name, int width, int height)
-    : window_(name, width, height), renderer_(), timer_(), assets_(renderer_), 
+    : window_(name, width, height), renderer_(), timer_(), assets_(renderer_, DefaultAssetRoot()), 
     task_scheduler_(), scene_(task_scheduler_) {
     InitializeEngine();
 }

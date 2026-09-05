@@ -106,5 +106,11 @@ std::string AssetRegistry::ResolvePath(const std::string& id) const {
   if (IsAbsolutePath(id) || asset_root_.empty()) return id;
   return asset_root_ + "/" + id;
 }
+const std::unordered_map<std::string, MeshHandle>& AssetRegistry::GetMeshes() const {
+  return meshes_;
+}
+const std::unordered_map<std::string, TextureHandle>& AssetRegistry::GetTextures() const {
+  return textures_;
+}
 
 }  // namespace engine

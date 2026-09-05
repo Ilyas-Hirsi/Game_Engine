@@ -66,12 +66,12 @@ inline MeshData Cube(float size = 1.0f) {
     // Horizontal ground plane on the XZ axis (y = 0), facing up.
     inline MeshData Plane() {
         MeshData mesh;
-        mesh.layout = {{0, 3}, {1, 3}};
+        mesh.layout = {{0, 3}, {1, 3}, {6, 2}};
         mesh.vertices = {
-            -0.5f, 0.0f, -0.5f, 0.6f, 0.6f, 0.6f,
-             0.5f, 0.0f, -0.5f, 0.6f, 0.6f, 0.6f,
-             0.5f, 0.0f,  0.5f, 0.7f, 0.7f, 0.7f,
-            -0.5f, 0.0f,  0.5f, 0.7f, 0.7f, 0.7f,
+            -0.5f, 0.0f, -0.5f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+             0.5f, 0.0f, -0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f,
+             0.5f, 0.0f,  0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+            -0.5f, 0.0f,  0.5f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f,
         };
         mesh.indices = {
             0, 1, 2, 2, 3, 0,
@@ -82,12 +82,12 @@ inline MeshData Cube(float size = 1.0f) {
     // Vertical quad on the XY plane (z = 0), facing +Z. Useful for billboards.
     inline MeshData Quad() {
         MeshData mesh;
-        mesh.layout = {{0, 3}, {1, 3}};
+        mesh.layout = {{0, 3}, {1, 3}, {6, 2}};
         mesh.vertices = {
-            -0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 1.0f,
-             0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 1.0f,
-             0.5f,  0.5f, 0.0f, 1.0f, 1.0f, 1.0f,
-            -0.5f,  0.5f, 0.0f, 1.0f, 1.0f, 1.0f,
+            -0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+             0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f,
+             0.5f,  0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+            -0.5f,  0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f,
         };
         mesh.indices = {
             0, 1, 2, 2, 3, 0,

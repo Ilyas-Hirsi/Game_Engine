@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "../Scene/Entity.h"
+#include "AssetBrowser.h"
 
 namespace engine {
 
@@ -31,8 +32,10 @@ class EditorLayer {
 
   entity_t selected_ = kNoSelection;
   std::vector<entity_t> scratch_;
+  AssetBrowser asset_browser_;
   bool show_hierarchy_ = true;
   bool show_inspector_ = true;
+  bool show_asset_browser_ = true;
   bool show_stats_ = true;
 };
 

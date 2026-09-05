@@ -85,6 +85,15 @@ target_include_directories(imgui PUBLIC
 # because they never share a translation unit.
 target_link_libraries(imgui PUBLIC SDL2::SDL2 OpenGL::GL)
 
+FetchContent_Declare(
+  ImGuiFileDialog
+  GIT_REPOSITORY https://github.com/aiekick/ImGuiFileDialog.git
+  GIT_TAG v0.6.7
+  GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(ImGuiFileDialog)
+target_link_libraries(ImGuiFileDialog PUBLIC imgui)
+
 add_subdirectory(engine)
 
 add_executable(Game_Engine

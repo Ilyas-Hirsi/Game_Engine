@@ -172,7 +172,7 @@ void BuildDemoScene(engine::Scene& scene, engine::AssetRegistry& assets) {
 
   const engine::MeshHandle character_mesh = assets.Mesh("character");
   const engine::TextureHandle crate_tex =
-      assets.Texture("C:/Users/ilyas/Downloads/mauga.jpeg");
+      assets.Texture("textures/mauga.jpeg");
 
   std::mt19937 rng(1337u);
   std::uniform_real_distribution<float> spread(-kHalf + kBodyExtent, kHalf - kBodyExtent);

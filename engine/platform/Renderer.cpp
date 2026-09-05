@@ -7,8 +7,10 @@
 #include <SDL_image.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cstring>
 #include <iostream>
 #include <limits>
+#include <vector>
 
 namespace engine {
 
@@ -282,6 +284,22 @@ void Renderer::SetClearColor(std::uint8_t r, std::uint8_t g, std::uint8_t b,
   clear_a_ = a;
 }
 
+namespace {
+// Flip images so they aooear correctly in the texture.
+void FlipSurfaceRows(SDL_Surface* surface) {
+  const int pitch = surface->pitch;
+  auto* pixels = static_cast<unsigned char*>(surface->pixels);
+  std::vector<unsigned char> scratch(pitch);
+  for (int y = 0; y < surface->h / 2; ++y) {
+    unsigned char* top = pixels + y * pitch;
+    unsigned char* bottom = pixels + (surface->h - 1 - y) * pitch;
+    std::memcpy(scratch.data(), top, pitch);
+    std::memcpy(top, bottom, pitch);
+    std::memcpy(bottom, scratch.data(), pitch);
+  }
+}
+}  // namespace
+
 TextureHandle Renderer::LoadTexture(const std::string& texture_path) {
   if (gl_context_ == nullptr) {
     return {};
@@ -298,14 +316,15 @@ TextureHandle Renderer::LoadTexture(const std::string& texture_path) {
   if (formatted_surface == nullptr) {
     return {};
   }
+  FlipSurfaceRows(formatted_surface);
 
   GLuint texture = 0;
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, formatted_surface->w,
                formatted_surface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                formatted_surface->pixels);

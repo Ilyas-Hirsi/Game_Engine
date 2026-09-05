@@ -65,3 +65,9 @@ Desktop.ini
 *.swp
 *.swo
 ~$*
+
+# temp storage for imported assets
+/projects/dev/assets/**
+!/projects/dev/assets/**/
+!/projects/dev/assets/**/.gitkeep
+imgui.ini

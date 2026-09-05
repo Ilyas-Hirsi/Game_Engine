@@ -22,6 +22,7 @@ void EditorLayer::Draw(Scene& scene, AssetRegistry& assets, bool& paused) {
   if (show_stats_) DrawStats(scene, paused);
   if (show_hierarchy_) DrawHierarchy(scene, selected_, scratch_);
   if (show_inspector_) DrawInspector(scene, assets, selected_);
+  if (show_asset_browser_) asset_browser_.DrawAssetBrowser(assets);
 }
 
 void EditorLayer::DrawMenuBar(Scene& scene) {
