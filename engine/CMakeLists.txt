@@ -1,6 +1,7 @@
 add_library(EnginePlatform STATIC
   platform/Window.cpp
   platform/Renderer.cpp
+  platform/MeshLoader.cpp
   platform/Input/Input.cpp
   ui/ImGuiLayer.cpp
   assets/AssetRegistry.cpp
@@ -11,6 +12,7 @@ target_include_directories(EnginePlatform PUBLIC
 )
 target_link_libraries(EnginePlatform PUBLIC
   ImGuiFileDialog
+  tinyobjloader
   SDL2::SDL2
   SDL2_image::SDL2_image
   glad

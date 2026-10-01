@@ -7,6 +7,7 @@
 #include <string>
 #include <tuple>
 
+#include "../Scene/Components/ColliderComponent.h"
 #include "../Scene/Components/Reflection.h"
 #include "../Scene/Scene.h"
 #include "../assets/AssetRegistry.h"
@@ -42,11 +43,21 @@ struct InspectVisitor {
 
   void operator()(const char* name, MeshHandle& v) const {
     const std::string& id = assets.MeshName(v);
-    ImGui::LabelText(name, "%s", id.empty() ? "<unregistered>" : id.c_str());
+    if (!ImGui::BeginCombo(name, id.empty() ? "<none>" : id.c_str())) return;
+    if (ImGui::Selectable("<none>", !v.IsValid())) v = {};
+    for (const auto& [asset_id, handle] : assets.GetMeshes()) {
+      if (ImGui::Selectable(asset_id.c_str(), handle.id == v.id)) v = handle;
+    }
+    ImGui::EndCombo();
   }
   void operator()(const char* name, TextureHandle& v) const {
     const std::string& id = assets.TextureName(v);
-    ImGui::LabelText(name, "%s", id.empty() ? "<none>" : id.c_str());
+    if (!ImGui::BeginCombo(name, id.empty() ? "<none>" : id.c_str())) return;
+    if (ImGui::Selectable("<none>", !v.IsValid())) v = {};
+    for (const auto& [asset_id, handle] : assets.GetTextures()) {
+      if (ImGui::Selectable(asset_id.c_str(), handle.id == v.id)) v = handle;
+    }
+    ImGui::EndCombo();
   }
 
   void operator()(const char* name, KeyCode& v) const {
@@ -63,11 +74,37 @@ void InspectComponent(Scene& scene, entity_t entity, const AssetRegistry& assets
   T* component = scene.pool<T>().try_get(entity);
   if (component == nullptr) return;
 
-  if (ImGui::CollapsingHeader(Reflect<T>::kName, ImGuiTreeNodeFlags_DefaultOpen)) {
-    ImGui::PushID(Reflect<T>::kName);
-    Reflect<T>::Fields(*component, InspectVisitor{assets});
-    ImGui::PopID();
+  const bool open =
+      ImGui::CollapsingHeader(Reflect<T>::kName, ImGuiTreeNodeFlags_DefaultOpen);
+
+  ImGui::PushID(Reflect<T>::kName);
+  ImGui::SameLine(ImGui::GetContentRegionMax().x - 22.0f);
+  const bool remove = ImGui::SmallButton("x");
+  if (open) Reflect<T>::Fields(*component, InspectVisitor{assets});
+  ImGui::PopID();
+
+  // Removal swap-and-pops the pool, so it happens after the fields are drawn.
+  if (remove) scene.remove<T>(Entity(entity));
+}
+
+template <class T>
+void AddComponentItem(Scene& scene, entity_t entity) {
+  if (scene.pool<T>().contains(entity)) return;
+  if (!ImGui::MenuItem(Reflect<T>::kName)) return;
+
+  // A collider with no shapes has no valid bounds, so it starts as a unit box.
+  if constexpr (std::is_same_v<T, ColliderComponent>) {
+    ColliderComponent collider;
+    collider.child_shapes.push_back({Box{glm::vec3(0.5f)}});
+    scene.emplace<ColliderComponent>(Entity(entity), collider);
+  } else {
+    scene.emplace<T>(Entity(entity));
   }
+}
+
+template <class... Cs>
+void AddComponentMenu(Scene& scene, entity_t entity, std::tuple<Cs...>*) {
+  (AddComponentItem<Cs>(scene, entity), ...);
 }
 
 // The tuple pointer is never dereferenced; it only carries the type list.
@@ -85,6 +122,14 @@ void DrawInspector(Scene& scene, const AssetRegistry& assets, entity_t& selected
   if (scene.GetEntities().valid(selected)) {
     InspectAll(scene, selected, assets,
                static_cast<Scene::Registry::component_list*>(nullptr));
+
+    ImGui::Separator();
+    if (ImGui::Button("Add Component")) ImGui::OpenPopup("add_component");
+    if (ImGui::BeginPopup("add_component")) {
+      AddComponentMenu(scene, selected,
+                       static_cast<Scene::Registry::component_list*>(nullptr));
+      ImGui::EndPopup();
+    }
   } else {
     ImGui::TextUnformatted("No entity selected");
   }

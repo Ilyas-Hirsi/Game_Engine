@@ -63,7 +63,9 @@ FetchContent_MakeAvailable(glm)
 FetchContent_Declare(
   imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui.git
-  GIT_TAG docking
+  # Pinned: `docking` is a moving branch, so a fresh configure could pull a
+  # different ImGui and break the build in ways that look like local bugs.
+  GIT_TAG v1.92.9b-docking
   GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(imgui)
@@ -93,6 +95,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(ImGuiFileDialog)
 target_link_libraries(ImGuiFileDialog PUBLIC imgui)
+
+FetchContent_Declare(
+  tinyobjloader
+  GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git
+  GIT_TAG v2.0.0rc13
+  GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(tinyobjloader)
 
 add_subdirectory(engine)
 
@@ -127,4 +137,9 @@ if(WIN32)
             $<TARGET_FILE:glad>
             $<TARGET_FILE_DIR:Game_Engine>
     COMMENT "Copying glad.dll next to Game_Engine.exe")
+  add_custom_command(TARGET Game_Engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:tinyobjloader>
+            $<TARGET_FILE_DIR:Game_Engine>
+    COMMENT "Copying tinyobjloader.dll next to Game_Engine.exe")
 endif()

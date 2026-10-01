@@ -3,6 +3,7 @@
 #include <ImGuiFileDialog.h>
 #include <imgui.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 
@@ -47,7 +48,27 @@ std::string ImportInto(const AssetRegistry& assets, const fs::path& source,
   return folder + "/" + dest.filename().string();
 }
 
+void ListFolder(const std::string& root, const std::string& folder,
+                std::vector<std::string>& out) {
+  out.clear();
+  std::error_code ec;
+  const fs::path dir = fs::path(root) / folder;
+  for (const fs::directory_entry& entry : fs::directory_iterator(dir, ec)) {
+    if (!entry.is_regular_file(ec)) continue;
+    const std::string name = entry.path().filename().string();
+    if (!name.empty() && name.front() == '.') continue;
+    out.push_back(folder + "/" + name);
+  }
+  std::sort(out.begin(), out.end());
+}
+
 }  // namespace
+
+void AssetBrowser::Rescan(const AssetRegistry& assets) {
+  ListFolder(assets.Root(), "textures", texture_files_);
+  ListFolder(assets.Root(), "meshes", mesh_files_);
+  scanned_ = true;
+}
 
 void AssetBrowser::DrawAssetBrowser(AssetRegistry& assets) {
   ImGui::Begin("Assets");
@@ -62,25 +83,29 @@ void AssetBrowser::DrawAssetBrowser(AssetRegistry& assets) {
   }
   ImGui::SameLine();
 
-  // Mesh files need a loader before the registry can accept them.
-  ImGui::BeginDisabled(true);
-  ImGui::Button("Import Mesh...");
-  ImGui::EndDisabled();
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    ImGui::SetTooltip("No mesh file loader yet");
+  if (ImGui::Button("Import Mesh...")) {
+    pending_ = PendingImport::Mesh;
+    ImGuiFileDialog::Instance()->OpenDialog("ImportAsset", "Import Mesh", ".obj",
+                                            config);
   }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Refresh") || !scanned_) Rescan(assets);
 
   ImGui::Separator();
   ImGui::TextUnformatted(assets.Root().c_str());
 
+  // Loading is safe here: the GL context is current inside the ImGui frame.
   if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen)) {
-    for (const auto& [id, handle] : assets.GetTextures()) {
-      ImGui::BulletText("%s", id.c_str());
+    for (const std::string& id : texture_files_) {
+      const bool loaded = assets.GetTextures().count(id) != 0;
+      if (ImGui::Selectable(id.c_str(), loaded) && !loaded) assets.Texture(id);
     }
   }
   if (ImGui::CollapsingHeader("Meshes", ImGuiTreeNodeFlags_DefaultOpen)) {
-    for (const auto& [id, handle] : assets.GetMeshes()) {
-      ImGui::BulletText("%s", id.c_str());
+    for (const std::string& id : mesh_files_) {
+      const bool loaded = assets.GetMeshes().count(id) != 0;
+      if (ImGui::Selectable(id.c_str(), loaded) && !loaded) assets.Mesh(id);
     }
   }
 
@@ -91,11 +116,16 @@ void AssetBrowser::DrawAssetBrowser(AssetRegistry& assets) {
   // child, which resolves to nothing unless the window has room to begin with.
   if (ImGuiFileDialog::Instance()->Display(
           "ImportAsset", ImGuiWindowFlags_NoCollapse, ImVec2(700.0f, 400.0f))) {
-    if (ImGuiFileDialog::Instance()->IsOk() && pending_ == PendingImport::Texture) {
-      const std::string id = ImportInto(
-          assets, ImGuiFileDialog::Instance()->GetFilePathName(), "textures");
-      // Loading here is safe: the GL context is current inside the ImGui frame.
-      if (!id.empty()) assets.Texture(id);
+    // Loading here is safe: the GL context is current inside the ImGui frame.
+    if (ImGuiFileDialog::Instance()->IsOk()) {
+      const fs::path source = ImGuiFileDialog::Instance()->GetFilePathName();
+      if (pending_ == PendingImport::Texture) {
+        const std::string id = ImportInto(assets, source, "textures");
+        if (!id.empty()) { assets.Texture(id); scanned_ = false; }
+      } else if (pending_ == PendingImport::Mesh) {
+        const std::string id = ImportInto(assets, source, "meshes");
+        if (!id.empty()) { assets.Mesh(id); scanned_ = false; }
+      }
     }
     ImGuiFileDialog::Instance()->Close();
     pending_ = PendingImport::None;

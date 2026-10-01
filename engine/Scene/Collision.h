@@ -353,7 +353,7 @@ std::visit(
       aabb.max = glm::max(aabb.max, child_pos + world_half);
     } else if constexpr (std::is_same_v<T, Plane>) {
       // Planes are infinite and handled in a separate pass, so they add
-      // nothing here; a plane-only collider keeps the inverted-infinity box.
+      // nothing here.
     }
     else if constexpr (std::is_same_v<T, Capsule>) {
       const float half_height = col.height * 0.5f;
@@ -365,6 +365,13 @@ std::visit(
   },
   child.shape);
 
+  }
+  // Nothing bounded contributed, so the box is still inverted and would corrupt
+  // every union the BVH does with it. A point at the entity is a valid box, has
+  // no meaningful overlap, and starts tracking properly once shapes are added.
+  if (aabb.min.x > aabb.max.x) {
+    aabb.min = pos;
+    aabb.max = pos;
   }
 return aabb;
 }

@@ -1,6 +1,7 @@
 #include "AssetRegistry.h"
 
 #include "../core/Log.h"
+#include "../platform/MeshLoader.h"
 #include "../platform/Renderer.h"
 
 namespace engine {
@@ -26,13 +27,13 @@ MeshHandle AssetRegistry::Mesh(const std::string& id) {
   const auto cached = meshes_.find(id);
   if (cached != meshes_.end()) return cached->second;
 
-  const auto builder = mesh_builders_.find(id);
-  if (builder == mesh_builders_.end()) {
-    LogError("No mesh registered under id: " + id);
-    return {};
-  }
 
-  const MeshHandle handle = renderer_.CreateMesh(builder->second());
+  const auto builder = mesh_builders_.find(id);
+  const MeshData data = builder != mesh_builders_.end() ? builder->second()
+                                                        : LoadObj(ResolvePath(id));
+  if (data.vertices.empty()) return {};
+
+  const MeshHandle handle = renderer_.CreateMesh(data);
   if (!handle.IsValid()) {
     LogError("Failed to create mesh: " + id);
     return {};
